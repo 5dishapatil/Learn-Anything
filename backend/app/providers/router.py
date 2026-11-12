@@ -75,20 +75,22 @@ class ProviderRouter:
         return cfg
 
     def get_active_provider(self, task_type: str = "general_explanation") -> tuple[AIProvider, str, bool]:
+        from app.services.secret_storage import decrypt_secret
         user_settings = self.db.query(UserSettings).first()
         ollama_cfg = self.get_ollama_config()
         gemini_cfg = self.get_gemini_config()
 
+        gemini_api_key = decrypt_secret(gemini_cfg.encrypted_api_key)
         if (
             gemini_cfg.is_enabled
             and gemini_cfg.is_default
-            and gemini_cfg.encrypted_api_key
+            and gemini_api_key
             and (user_settings is None or user_settings.allow_cloud_ai)
         ):
             model = (gemini_cfg.task_routing_json or {}).get(task_type) or gemini_cfg.default_model
             return (
                 GeminiProvider(
-                    api_key=gemini_cfg.encrypted_api_key,
+                    api_key=gemini_api_key,
                     default_model=model,
                     enabled=True,
                 ),

@@ -153,7 +153,7 @@ export const BuilderWorkspaceView: React.FC<BuilderWorkspaceViewProps> = ({
         ];
 
   return (
-    <div className="space-y-5 font-serif">
+    <div className="space-y-5 font-sans">
       {/* =====================================================================
           COMPACT TOP DAY-WISE SELECTOR BAR (No Left Sidebar, No Hero Clutter)
          ===================================================================== */}

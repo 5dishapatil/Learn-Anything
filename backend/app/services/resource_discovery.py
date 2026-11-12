@@ -573,6 +573,53 @@ class ResourceIntelligenceService:
             "Accept-Language": "en-US,en;q=0.9",
         }
         search_q = query if "lecture" in query.lower() or "tutorial" in query.lower() else f"{query} lecture tutorial"
+        
+        # 1. If user configured an authentic Google YouTube Data API v3 key, prioritize official API
+        if settings.YOUTUBE_API_KEY:
+            try:
+                async with httpx.AsyncClient(timeout=4.0) as client:
+                    resp = await client.get(
+                        "https://www.googleapis.com/youtube/v3/search",
+                        params={
+                            "part": "snippet",
+                            "q": search_q,
+                            "type": "video",
+                            "videoDuration": "medium",
+                            "maxResults": max_results,
+                            "key": settings.YOUTUBE_API_KEY,
+                        },
+                    )
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        api_results = []
+                        for it in data.get("items", []):
+                            vid_id = it.get("id", {}).get("videoId", "")
+                            snip = it.get("snippet", {})
+                            if vid_id and snip:
+                                api_results.append({
+                                    "provider_name": "youtube",
+                                    "external_id": f"yt-{vid_id}",
+                                    "title": snip.get("title", ""),
+                                    "url": f"https://www.youtube.com/watch?v={vid_id}",
+                                    "resource_type": "video",
+                                    "authors_json": [snip.get("channelTitle", "YouTube Channel")],
+                                    "published_date": (snip.get("publishedAt", "")[:10]) or "2024",
+                                    "access_status": "Completely free",
+                                    "license_info": "Standard YouTube License",
+                                    "description": snip.get("description", ""),
+                                    "relevance_explanation": f"Official YouTube lecture for '{query}' from {snip.get('channelTitle', 'channel')}.",
+                                    "credibility_score": 0.92,
+                                    "relevance_score": 0.94,
+                                    "difficulty_level": "intermediate",
+                                    "stars_or_citations": 0,
+                                    "duration_or_length": "Video Lecture",
+                                    "thumbnail_url": snip.get("thumbnails", {}).get("medium", {}).get("url", f"https://i.ytimg.com/vi/{vid_id}/mqdefault.jpg"),
+                                })
+                        if api_results:
+                            return api_results[:max_results]
+            except Exception:
+                pass
+
         try:
             async with httpx.AsyncClient(timeout=5.0, headers=headers, follow_redirects=True) as client:
                 resp = await client.get(
@@ -622,10 +669,8 @@ class ResourceIntelligenceService:
                                 snippet_runs = desc_snippets[0].get("snippetText", {}).get("runs", [])
                                 desc_text = "".join(r.get("text", "") for r in snippet_runs)
 
-                            views_num = 1000
                             digits = re.sub(r"[^\d]", "", views_text)
-                            if digits:
-                                views_num = int(digits)
+                            views_num = int(digits) if digits else 0
 
                             results.append(
                                 {
@@ -748,7 +793,7 @@ class ResourceIntelligenceService:
             language=payload.get("language", ""),
             duration_or_length=payload.get("duration_or_length", ""),
             thumbnail_url=payload.get("thumbnail_url", ""),
-            is_saved_to_library=True,
+            is_saved_to_library=bool(payload.get("is_saved_to_library", False)),
             last_verified_at=now,
         )
         self.db.add(res)

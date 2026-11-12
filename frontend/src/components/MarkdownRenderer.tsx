@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { marked } from 'marked';
 import katex from 'katex';
+import DOMPurify from 'dompurify';
 
 interface MarkdownRendererProps {
   content: string;
@@ -75,7 +76,18 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
       parsed = parsed.replace(new RegExp(`%%KATEX_INLINE_${i}%%`, 'g'), h);
     });
 
-    return parsed;
+    // 7. Sanitize output HTML using DOMPurify with MathML and SVG tag whitelisting
+    return DOMPurify.sanitize(parsed, {
+      ADD_TAGS: [
+        'svg', 'path', 'g', 'rect', 'circle', 'text', 'line', 'polygon', 'foreignObject', 'style',
+        'annotation', 'semantics', 'mrow', 'mi', 'mn', 'mo', 'msup', 'msub', 'mfrac', 'mover',
+        'munder', 'msqrt', 'mroot', 'mtable', 'mtr', 'mtd', 'span', 'div'
+      ],
+      ADD_ATTR: [
+        'viewBox', 'xmlns', 'fill', 'stroke', 'd', 'x', 'y', 'width', 'height', 'transform',
+        'class', 'style', 'aria-hidden', 'encoding'
+      ],
+    });
   }, [content]);
 
   return (

@@ -1,5 +1,6 @@
 import React, { useEffect, useId, useState } from 'react';
 import mermaid from 'mermaid';
+import DOMPurify from 'dompurify';
 
 mermaid.initialize({
   startOnLoad: false,
@@ -26,7 +27,10 @@ export const MermaidDiagram: React.FC<MermaidDiagramProps> = ({ chart, title }) 
         setRenderFailed(false);
         const { svg } = await mermaid.render(`mermaid_${rawId}_${Date.now()}`, chart.trim());
         if (active) {
-          setSvgContent(svg);
+          const sanitizedSvg = DOMPurify.sanitize(svg, {
+            USE_PROFILES: { svg: true, svgFilters: true },
+          });
+          setSvgContent(sanitizedSvg);
         }
       } catch {
         if (active) {

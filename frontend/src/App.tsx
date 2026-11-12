@@ -1382,12 +1382,14 @@ export function App() {
                           <span>TARGET DAYS</span>
                           <span className="text-emerald-300">{durationDays} Days</span>
                         </div>
-                        <div className="grid grid-cols-4 gap-1.5">
+                        <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
                           {[
+                            { label: '7d', days: 7 },
                             { label: '14d', days: 14 },
                             { label: '1m', days: 30 },
                             { label: '3m', days: 90 },
                             { label: '6m', days: 180 },
+                            { label: '1y', days: 365 },
                           ].map((p) => (
                             <button
                               key={p.days}

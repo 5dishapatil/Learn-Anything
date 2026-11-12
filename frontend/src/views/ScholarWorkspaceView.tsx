@@ -151,7 +151,7 @@ export const ScholarWorkspaceView: React.FC<ScholarWorkspaceViewProps> = ({
   };
 
   return (
-    <div className="relative -mx-4 -my-6 flex min-h-[calc(100vh-5rem)] flex-col bg-slate-950 sm:-mx-8 font-serif">
+    <div className="relative -mx-4 -my-6 flex min-h-[calc(100vh-5rem)] flex-col bg-slate-950 sm:-mx-8 font-sans">
       {/* Top Scholar Chrome Bar (No T-Serif / A3 buttons, No Right Drawer button) */}
       <header className="sticky top-0 z-30 flex flex-wrap items-center justify-between gap-3 border-b border-slate-800/80 bg-slate-950/95 px-6 py-3.5 backdrop-blur-md">
         <div className="flex items-center gap-3.5">
@@ -298,7 +298,7 @@ export const ScholarWorkspaceView: React.FC<ScholarWorkspaceViewProps> = ({
 
         {/* Center Main Workspace: Structured into WHAT TO DO -> HOW TO DO IT -> WHAT WE'VE LEARNT SO FAR */}
         <main className="flex-1 overflow-y-auto px-6 py-8 sm:px-10 md:px-14">
-          <article className="mx-auto max-w-[82ch] space-y-12">
+          <article className="mx-auto max-w-[82ch] space-y-12 font-serif text-[19px] leading-[1.85]">
             {/* =====================================================================
                 HEADER & LIVE QWEN3.5:9B DEEP SYNTHESIS TRIGGER
                ===================================================================== */}

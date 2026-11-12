@@ -9,6 +9,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 from app.config import WORKSPACE_DIR, settings
+from app.services.secret_storage import decrypt_secret
 from app.models.domain import (
     Concept,
     Experiment,
@@ -304,8 +305,10 @@ tags:
         if vault_root_str:
             vault_root = Path(vault_root_str).resolve()
             dest_path = (vault_root / rel_path).resolve()
-            # Path traversal security guard
-            if not str(dest_path).startswith(str(vault_root)):
+            # Robust path traversal & symlink escape guard
+            try:
+                dest_path.relative_to(vault_root)
+            except ValueError:
                 raise PermissionError("Path traversal outside approved vault directory is forbidden.")
 
             dest_path.parent.mkdir(parents=True, exist_ok=True)
@@ -327,11 +330,19 @@ tags:
         # Optional Stage 2: Local REST API push if token configured
         if cfg.is_enabled and cfg.auth_token and cfg.endpoint_url:
             try:
+                parsed_url = urllib.parse.urlparse(cfg.endpoint_url)
+                # SSRF Protection: strictly allow local loopback endpoints
+                if parsed_url.hostname not in ("127.0.0.1", "localhost", "::1"):
+                    raise ValueError("Obsidian REST API endpoint must be a local loopback address (127.0.0.1 or localhost).")
+
+                decrypted_token = decrypt_secret(cfg.auth_token)
                 headers = {
-                    "Authorization": f"Bearer {cfg.auth_token}",
+                    "Authorization": f"Bearer {decrypted_token}",
                     "Content-Type": "text/markdown",
                 }
-                async with httpx.AsyncClient(timeout=3.0, verify=False) as client:
+                # Local Obsidian plugin uses self-signed HTTPS certificate on loopback
+                is_loopback = parsed_url.hostname in ("127.0.0.1", "localhost", "::1")
+                async with httpx.AsyncClient(timeout=3.0, verify=not is_loopback) as client:
                     url = f"{cfg.endpoint_url.rstrip('/')}/vault/{ urllib.parse.quote(rel_path) }"
                     resp = await client.put(url, content=md_content.encode("utf-8"), headers=headers)
                     rest_api_pushed = resp.status_code in (200, 201, 204)

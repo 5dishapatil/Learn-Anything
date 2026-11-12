@@ -127,6 +127,12 @@ class LearningJourney(Base):
     tasks: Mapped[List["LearningTask"]] = relationship(
         "LearningTask", back_populates="journey", cascade="all, delete-orphan"
     )
+    days: Mapped[List["LearningDay"]] = relationship(
+        "LearningDay", back_populates="journey", cascade="all, delete-orphan", order_by="LearningDay.day_number"
+    )
+    generation_jobs: Mapped[List["GenerationJob"]] = relationship(
+        "GenerationJob", back_populates="journey", cascade="all, delete-orphan"
+    )
 
 
 class LearningBlueprint(Base):
@@ -958,3 +964,77 @@ class BackupRecord(Base):
     triggered_by: Mapped[str] = mapped_column(String(60), default="manual")
     notes_summary: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class LearningDay(Base):
+    """First-class model representing a structured day of study, practice, or milestone."""
+    __tablename__ = "learning_days"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    journey_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("learning_journeys.id", ondelete="CASCADE"), index=True
+    )
+    day_number: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    theme: Mapped[str] = mapped_column(String(255), default="")
+    phase_name: Mapped[str] = mapped_column(String(120), default="Phase 1: Foundations")
+    week_number: Mapped[int] = mapped_column(Integer, default=1)
+    day_type: Mapped[str] = mapped_column(
+        String(40), default="lesson"
+    )  # lesson | practice | review | project | assessment | research | rest | catch_up
+    estimated_minutes: Mapped[int] = mapped_column(Integer, default=90)
+
+    # Scholar road linkage
+    scholar_concept_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("concepts.id", ondelete="SET NULL"), nullable=True
+    )
+    scholar_objective: Mapped[str] = mapped_column(Text, default="")
+    youtube_search_query: Mapped[str] = mapped_column(String(255), default="")
+    youtube_video_id: Mapped[str] = mapped_column(String(60), default="")
+    youtube_video_title: Mapped[str] = mapped_column(String(255), default="")
+
+    # Builder road linkage
+    builder_lab_title: Mapped[str] = mapped_column(String(255), default="")
+    builder_lab_mission: Mapped[str] = mapped_column(Text, default="")
+    builder_starter_code: Mapped[str] = mapped_column(Text, default="")
+    builder_test_cases_json: Mapped[list] = mapped_column(JSON, default=list)
+    builder_hints_json: Mapped[list] = mapped_column(JSON, default=list)
+    builder_completed: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    # Status & Progress
+    is_completed: Mapped[bool] = mapped_column(Boolean, default=False)
+    completion_score: Mapped[float] = mapped_column(Float, default=0.0)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    feynman_stage: Mapped[int] = mapped_column(Integer, default=1)
+    notes_summary: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    journey: Mapped["LearningJourney"] = relationship("LearningJourney", back_populates="days")
+    concept: Mapped[Optional["Concept"]] = relationship("Concept")
+
+
+class GenerationJob(Base):
+    """Durable job record for asynchronous, resilient, resumable curriculum and lesson generation."""
+    __tablename__ = "generation_jobs"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, index=True)
+    journey_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("learning_journeys.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    job_type: Mapped[str] = mapped_column(
+        String(60), nullable=False
+    )  # curriculum_master | phase_expansion | day_detail | lesson_on_demand
+    status: Mapped[str] = mapped_column(
+        String(40), default="pending"
+    )  # pending | running | completed | failed | paused
+    progress_percent: Mapped[float] = mapped_column(Float, default=0.0)
+    current_step: Mapped[str] = mapped_column(String(255), default="Initializing...")
+    total_steps: Mapped[int] = mapped_column(Integer, default=1)
+    completed_steps: Mapped[int] = mapped_column(Integer, default=0)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    payload_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    result_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+    journey: Mapped[Optional["LearningJourney"]] = relationship("LearningJourney", back_populates="generation_jobs")

@@ -23,8 +23,10 @@ from app.models.domain import (
     FeynmanExplanation,
     FeynmanFeedback,
     Flashcard,
+    GenerationJob,
     IntegrationConfig,
     LearningBlueprint,
+    LearningDay,
     LearningJourney,
     LearningRoad,
     LearningSession,
@@ -55,6 +57,7 @@ from app.providers.ollama_provider import OllamaProvider
 from app.providers.gemini_provider import GeminiProvider
 from app.providers.router import ProviderRouter
 from app.services.ai_orchestrator import AIOrchestrationService
+from app.services.curriculum_planner import CurriculumPlannerService
 from app.services.n8n_connector import N8nAutomationService
 from app.services.obsidian_connector import ObsidianConnectorService
 from app.services.resource_discovery import ResourceIntelligenceService
@@ -246,6 +249,70 @@ def _serialize_journey(j: LearningJourney, db: Session) -> dict[str, Any]:
     concepts = [_serialize_concept(c, db) for c in j.concepts]
     projects = db.query(Project).filter(Project.journey_id == j.id).all()
     tasks = db.query(LearningTask).filter(LearningTask.journey_id == j.id).order_by(LearningTask.day_number.asc()).all()
+
+    # Load or lazily instantiate days for backward compatibility
+    days = (
+        db.query(LearningDay)
+        .filter(LearningDay.journey_id == j.id)
+        .order_by(LearningDay.day_number.asc())
+        .all()
+    )
+    if not days and j.concepts:
+        for idx, c in enumerate(j.concepts):
+            d_num = idx + 1
+            new_day = LearningDay(
+                journey_id=j.id,
+                day_number=d_num,
+                title=c.title,
+                phase_name="Phase 1: Foundations",
+                week_number=(d_num - 1) // 7 + 1,
+                day_type="lesson",
+                estimated_minutes=j.daily_minutes or 45,
+                scholar_concept_id=c.id,
+                scholar_objective=c.summary,
+                youtube_search_query=f"{j.title} {c.title}",
+                builder_lab_title=f"{c.title} — Implementation Lab",
+                builder_lab_mission=f"Implement and verify {c.title} with invariant assertions.",
+                builder_starter_code="",
+                feynman_stage=(idx % 6) + 1,
+            )
+            db.add(new_day)
+        db.commit()
+        days = (
+            db.query(LearningDay)
+            .filter(LearningDay.journey_id == j.id)
+            .order_by(LearningDay.day_number.asc())
+            .all()
+        )
+
+    serialized_days = [
+        {
+            "id": d.id,
+            "day_number": d.day_number,
+            "title": d.title,
+            "theme": d.theme,
+            "phase_name": d.phase_name,
+            "week_number": d.week_number,
+            "day_type": d.day_type,
+            "estimated_minutes": d.estimated_minutes,
+            "scholar_concept_id": d.scholar_concept_id,
+            "scholar_objective": d.scholar_objective,
+            "youtube_search_query": d.youtube_search_query,
+            "youtube_video_id": d.youtube_video_id,
+            "youtube_video_title": d.youtube_video_title,
+            "builder_lab_title": d.builder_lab_title,
+            "builder_lab_mission": d.builder_lab_mission,
+            "builder_starter_code": d.builder_starter_code,
+            "builder_test_cases": d.builder_test_cases_json or [],
+            "builder_hints": d.builder_hints_json or [],
+            "builder_completed": d.builder_completed,
+            "is_completed": d.is_completed,
+            "completion_score": d.completion_score,
+            "feynman_stage": d.feynman_stage,
+        }
+        for d in days
+    ]
+
     return {
         "id": j.id,
         "title": j.title,
@@ -265,6 +332,7 @@ def _serialize_journey(j: LearningJourney, db: Session) -> dict[str, Any]:
         "current_concept_id": j.current_concept_id,
         "current_milestone_id": j.current_milestone_id,
         "last_active_at": j.last_active_at.isoformat() if j.last_active_at else None,
+        "days": serialized_days,
         "blueprint": {
             "id": bp.id,
             "title": bp.title,
@@ -422,18 +490,28 @@ async def create_journey(req: CreateJourneyRequest, db: Session = Depends(get_db
         except Exception:
             pass
 
-    orchestrator = AIOrchestrationService(db)
-    journey = await orchestrator.create_full_learning_journey(
-        user_intent=req.user_intent,
-        experience_level=req.experience_level,
-        daily_minutes=req.daily_minutes,
-        duration_days=duration_days,
-        road_mode=req.road_mode,
-        preferred_format=req.preferred_format,
-        existing_knowledge=req.existing_knowledge,
-        final_project_goal=req.final_project_goal,
+    planner = CurriculumPlannerService(db)
+    job = planner.create_generation_job(
+        job_type="curriculum_master",
+        total_steps=6,
+        payload={"user_intent": req.user_intent, "duration_days": duration_days},
     )
-    return _serialize_journey(journey, db)
+
+    try:
+        journey = await planner.plan_full_curriculum(
+            user_intent=req.user_intent,
+            duration_days=duration_days,
+            experience_level=req.experience_level,
+            daily_minutes=req.daily_minutes,
+            road_mode=req.road_mode,
+            existing_knowledge=req.existing_knowledge,
+            final_project_goal=req.final_project_goal,
+            job_id=job.id,
+        )
+        return _serialize_journey(journey, db)
+    except Exception as exc:
+        planner.update_job_progress(job.id, "Generation failed", 0, status="failed", error_message=str(exc))
+        raise HTTPException(status_code=500, detail=f"Curriculum Generation Failed: {exc}")
 
 
 @router.get("/journeys/{journey_id}")
@@ -444,19 +522,132 @@ def get_journey(journey_id: int, db: Session = Depends(get_db)) -> dict[str, Any
     return _serialize_journey(j, db)
 
 
+@router.get("/journeys/{journey_id}/days")
+def get_journey_days(journey_id: int, db: Session = Depends(get_db)) -> list[dict[str, Any]]:
+    j = db.query(LearningJourney).filter(LearningJourney.id == journey_id).first()
+    if not j:
+        raise HTTPException(status_code=404, detail="Learning journey not found")
+    serialized = _serialize_journey(j, db)
+    return serialized.get("days", [])
+
+
+@router.get("/journeys/{journey_id}/days/{day_number}")
+async def get_journey_day_detail(
+    journey_id: int,
+    day_number: int,
+    deep_synthesize: bool = Query(False, description="Whether to trigger on-demand deep synthesis if code/theory is not yet generated"),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    day = (
+        db.query(LearningDay)
+        .filter(LearningDay.journey_id == journey_id, LearningDay.day_number == day_number)
+        .first()
+    )
+    if not day:
+        raise HTTPException(status_code=404, detail=f"Day {day_number} not found for Journey {journey_id}")
+
+    if deep_synthesize and not day.builder_starter_code:
+        planner = CurriculumPlannerService(db)
+        try:
+            await planner.synthesize_day_content_deep(journey_id=journey_id, day_number=day_number)
+            db.refresh(day)
+        except Exception:
+            pass
+
+    return {
+        "id": day.id,
+        "journey_id": day.journey_id,
+        "day_number": day.day_number,
+        "title": day.title,
+        "theme": day.theme,
+        "phase_name": day.phase_name,
+        "week_number": day.week_number,
+        "day_type": day.day_type,
+        "estimated_minutes": day.estimated_minutes,
+        "scholar_concept_id": day.scholar_concept_id,
+        "scholar_objective": day.scholar_objective,
+        "youtube_search_query": day.youtube_search_query,
+        "youtube_video_id": day.youtube_video_id,
+        "youtube_video_title": day.youtube_video_title,
+        "builder_lab_title": day.builder_lab_title,
+        "builder_lab_mission": day.builder_lab_mission,
+        "builder_starter_code": day.builder_starter_code,
+        "builder_test_cases": day.builder_test_cases_json or [],
+        "builder_hints": day.builder_hints_json or [],
+        "builder_completed": day.builder_completed,
+        "is_completed": day.is_completed,
+        "completion_score": day.completion_score,
+        "feynman_stage": day.feynman_stage,
+    }
+
+
+@router.post("/journeys/{journey_id}/days/{day_number}/complete")
+def mark_journey_day_completed(
+    journey_id: int,
+    day_number: int,
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    day = (
+        db.query(LearningDay)
+        .filter(LearningDay.journey_id == journey_id, LearningDay.day_number == day_number)
+        .first()
+    )
+    if not day:
+        raise HTTPException(status_code=404, detail=f"Day {day_number} not found")
+
+    day.is_completed = True
+    day.builder_completed = True
+    day.completed_at = datetime.now(timezone.utc)
+    day.completion_score = 1.0
+
+    # Update overall journey progress
+    total_days = db.query(LearningDay).filter(LearningDay.journey_id == journey_id).count()
+    completed_days = (
+        db.query(LearningDay)
+        .filter(LearningDay.journey_id == journey_id, LearningDay.is_completed == True)
+        .count()
+    )
+    j = db.query(LearningJourney).filter(LearningJourney.id == journey_id).first()
+    if j and total_days > 0:
+        j.progress_percent = round((completed_days / total_days) * 100.0, 1)
+        j.last_active_at = datetime.now(timezone.utc)
+
+    # Award progress event
+    user = db.query(UserProfile).first()
+    user_id = user.id if user else 1
+    event = ProgressEvent(
+        user_id=user_id,
+        journey_id=journey_id,
+        event_type="day_completed",
+        title=f"Completed Day {day_number}: {day.title}",
+        road="hybrid",
+        xp_awarded=100,
+    )
+    db.add(event)
+    db.commit()
+    return {
+        "success": True,
+        "day_number": day.day_number,
+        "is_completed": True,
+        "journey_progress_percent": j.progress_percent if j else 0.0,
+    }
+
+
 @router.delete("/journeys/{journey_id}")
 def delete_journey(journey_id: int, db: Session = Depends(get_db)) -> dict[str, Any]:
     j = db.query(LearningJourney).filter(LearningJourney.id == journey_id).first()
     if not j:
         raise HTTPException(status_code=404, detail="Learning journey not found")
     title = j.title
-    # Clean up linked projects, tasks, sessions, and progress events
+    # Clean up linked projects, tasks, sessions, days, and progress events
     projects = db.query(Project).filter(Project.journey_id == journey_id).all()
     for p in projects:
         db.query(Experiment).filter(Experiment.project_id == p.id).delete()
         db.query(ProjectArtifact).filter(ProjectArtifact.project_id == p.id).delete()
         db.query(ProjectMilestone).filter(ProjectMilestone.project_id == p.id).delete()
         db.delete(p)
+    db.query(LearningDay).filter(LearningDay.journey_id == journey_id).delete()
+    db.query(GenerationJob).filter(GenerationJob.journey_id == journey_id).delete()
     db.query(LearningTask).filter(LearningTask.journey_id == journey_id).delete()
     db.query(LearningSession).filter(LearningSession.journey_id == journey_id).delete()
     db.query(ProgressEvent).filter(ProgressEvent.journey_id == journey_id).delete()
@@ -464,6 +655,25 @@ def delete_journey(journey_id: int, db: Session = Depends(get_db)) -> dict[str, 
     db.commit()
     rebuild_fts5_index(db)
     return {"deleted": True, "journey_id": journey_id, "title": title}
+
+
+@router.get("/jobs/{job_id}")
+def get_generation_job_status(job_id: str, db: Session = Depends(get_db)) -> dict[str, Any]:
+    job = db.query(GenerationJob).filter(GenerationJob.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Generation job not found")
+    return {
+        "job_id": job.id,
+        "journey_id": job.journey_id,
+        "job_type": job.job_type,
+        "status": job.status,
+        "progress_percent": job.progress_percent,
+        "current_step": job.current_step,
+        "total_steps": job.total_steps,
+        "completed_steps": job.completed_steps,
+        "error_message": job.error_message,
+        "result": job.result_json,
+    }
 
 
 @router.get("/web-search")
@@ -1083,65 +1293,32 @@ def update_project_artifact(
 
 @router.post("/artifacts/{artifact_id}/verify")
 def verify_project_artifact(artifact_id: int, db: Session = Depends(get_db)) -> dict[str, Any]:
-    """Run controlled, user-approved local syntax and execution verification in an isolated sandbox."""
-    import contextlib
-    import io
-    import os
+    """Run controlled, user-approved local syntax and execution verification in an isolated sandbox.
+    
+    Zero in-process exec() fallback. Clean environment and strict 5-second process timeout.
+    """
+    from app.services.code_execution import CodeExecutionService
 
     art = db.query(ProjectArtifact).filter(ProjectArtifact.id == artifact_id).first()
     if not art:
         raise HTTPException(status_code=404, detail="Artifact not found")
 
-    cleaned_content = "\n".join(
-        ln for ln in art.content.splitlines() if not ln.strip().startswith("```")
-    ).strip()
-
-    sandbox_file = settings.SANDBOX_DIR / f"verify_artifact_{art.id}.py"
-    sandbox_file.write_text(cleaned_content, encoding="utf-8")
-    passed = False
-    output = ""
-
-    env = os.environ.copy()
-    env["PYTHONIOENCODING"] = "utf-8"
-    try:
-        proc = subprocess.run(
-            [sys.executable, str(sandbox_file)],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            env=env,
-            timeout=5,
-            check=False,
-        )
-        if proc.returncode == 0:
-            passed = True
-            output = (proc.stdout or "").strip()
-        else:
-            output = ((proc.stdout or "") + "\n" + (proc.stderr or "")).strip()
-    except Exception:
-        passed = False
-
-    if not passed:
-        # Fallback isolated AST + in-process sandbox execution if Windows AppControl blocks child .venv python.exe
-        buf = io.StringIO()
-        try:
-            compiled = compile(cleaned_content, str(sandbox_file), "exec")
-            sandbox_globals: dict[str, Any] = {"__name__": "__main__", "__file__": str(sandbox_file)}
-            with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
-                exec(compiled, sandbox_globals)
-            passed = True
-            output = buf.getvalue().strip()
-        except Exception as exc:
-            passed = False
-            output = f"{buf.getvalue()}\n{type(exc).__name__}: {exc}".strip()
+    res = CodeExecutionService.execute_python_code(
+        code=art.content,
+        timeout=5.0,
+        entry_file_name=f"artifact_{art.id}.py",
+    )
 
     return {
         "artifact_id": art.id,
         "file_path": art.file_path,
-        "passed": passed,
-        "exit_code": 0 if passed else 1,
-        "output": output or "[PASS] Script executed cleanly with exit code 0.",
-        "security_note": "Executed in local isolated sandbox (`backend/sandbox_runs/`) with 5-second timeout.",
+        "passed": res.success,
+        "exit_code": res.exit_code if res.exit_code is not None else (0 if res.success else 1),
+        "output": res.output or ("[PASS] Script executed cleanly with exit code 0." if res.success else "Execution failed."),
+        "timed_out": res.timed_out,
+        "syntax_error": res.syntax_error,
+        "manual_run_command": res.manual_run_command,
+        "security_note": "Executed in ephemeral isolated sandbox with sanitized environment and 5-second timeout.",
     }
 
 
@@ -1269,6 +1446,7 @@ def _serialize_resource(r: Resource) -> dict[str, Any]:
         "language": r.language,
         "duration_or_length": r.duration_or_length,
         "thumbnail_url": r.thumbnail_url,
+        "is_saved_to_library": r.is_saved_to_library,
         "last_verified_at": r.last_verified_at.isoformat() if r.last_verified_at else None,
     }
 
@@ -1304,9 +1482,26 @@ async def discover_resources_endpoint(
 
 
 @router.get("/resources")
-def list_saved_resources(db: Session = Depends(get_db)) -> list[dict[str, Any]]:
-    resources = db.query(Resource).order_by(Resource.relevance_score.desc()).all()
+def list_saved_resources(
+    saved_only: bool = Query(False, description="Filter strictly to saved resources"),
+    db: Session = Depends(get_db),
+) -> list[dict[str, Any]]:
+    query = db.query(Resource)
+    if saved_only:
+        query = query.filter(Resource.is_saved_to_library == True)
+    resources = query.order_by(Resource.relevance_score.desc()).all()
     return [_serialize_resource(r) for r in resources]
+
+
+@router.post("/resources/{resource_id}/toggle_save")
+def toggle_save_resource(resource_id: int, db: Session = Depends(get_db)) -> dict[str, Any]:
+    res = db.query(Resource).filter(Resource.id == resource_id).first()
+    if not res:
+        raise HTTPException(status_code=404, detail="Resource not found")
+    res.is_saved_to_library = not res.is_saved_to_library
+    db.commit()
+    db.refresh(res)
+    return {"saved": res.is_saved_to_library, "resource": _serialize_resource(res)}
 
 
 # ---------------------------------------------------------------------------
@@ -1526,8 +1721,11 @@ async def get_ai_and_hardware_status(db: Session = Depends(get_db)) -> dict[str,
     installed_names = [m.name for m in ollama_health.available_models]
     hardware_report = inspect_host_hardware(installed_names)
 
+    from app.services.secret_storage import decrypt_secret, mask_secret
+
+    decrypted_gemini_key = decrypt_secret(gemini_cfg.encrypted_api_key)
     gemini_prov = GeminiProvider(
-        api_key=gemini_cfg.encrypted_api_key,
+        api_key=decrypted_gemini_key,
         default_model=gemini_cfg.default_model,
         enabled=gemini_cfg.is_enabled,
     )
@@ -1552,10 +1750,8 @@ async def get_ai_and_hardware_status(db: Session = Depends(get_db)) -> dict[str,
                 "is_enabled": gemini_cfg.is_enabled,
                 "is_default": gemini_cfg.is_default,
                 "default_model": gemini_cfg.default_model,
-                "has_api_key": bool(gemini_cfg.encrypted_api_key),
-                "masked_api_key": (
-                    f"••••••••{gemini_cfg.encrypted_api_key[-4:]}" if len(gemini_cfg.encrypted_api_key) >= 4 else ""
-                ),
+                "has_api_key": bool(decrypted_gemini_key),
+                "masked_api_key": mask_secret(gemini_cfg.encrypted_api_key),
                 "privacy_notice": gemini_cfg.privacy_notice,
             },
             "health": gemini_health.model_dump(),
@@ -1579,7 +1775,8 @@ async def update_ai_provider_config(
     if req.base_url is not None:
         cfg.base_url = req.base_url
     if req.api_key is not None:
-        cfg.encrypted_api_key = req.api_key
+        from app.services.secret_storage import encrypt_secret
+        cfg.encrypted_api_key = encrypt_secret(req.api_key.strip()) if req.api_key.strip() else ""
     if req.default_model is not None:
         cfg.default_model = req.default_model
     if req.task_routing_json is not None:
@@ -1709,7 +1906,8 @@ def update_obsidian_config(req: UpdateObsidianConfigRequest, db: Session = Depen
     if req.endpoint_url is not None:
         cfg.endpoint_url = req.endpoint_url
     if req.auth_token is not None:
-        cfg.auth_token = req.auth_token
+        from app.services.secret_storage import encrypt_secret
+        cfg.auth_token = encrypt_secret(req.auth_token.strip()) if req.auth_token.strip() else ""
     if req.vault_name is not None:
         cfg.vault_name = req.vault_name
     if req.vault_local_path is not None:

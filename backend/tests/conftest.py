@@ -11,8 +11,9 @@ from app.main import app
 from app.database import Base, get_db, init_fts5_index
 from app.seed.initial_data import ensure_seed_data
 
-TEST_DB_PATH = Path("backend/test_axiom.db")
-TEST_DATABASE_URL = f"sqlite:///{TEST_DB_PATH.resolve()}"
+TEST_DB_DIR = Path(__file__).resolve().parent.parent
+TEST_DB_PATH = TEST_DB_DIR / "test_axiom.db"
+TEST_DATABASE_URL = f"sqlite:///{TEST_DB_PATH.as_posix()}"
 
 
 @pytest.fixture(scope="session")
