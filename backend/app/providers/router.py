@@ -99,7 +99,7 @@ class ProviderRouter:
             )
 
         routing = ollama_cfg.task_routing_json or DEFAULT_TASK_ROUTING
-        model = ollama_cfg.default_model or routing.get(task_type) or "qwen3.5:9b"
+        model = routing.get(task_type) or ollama_cfg.default_model or "qwen3.5:9b"
         if model == "qwen3.5:4b" and ollama_cfg.default_model == "qwen3.5:9b":
             model = "qwen3.5:9b"
         return (

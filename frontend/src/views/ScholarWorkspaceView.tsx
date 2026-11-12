@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
   ConceptItem,
   ConceptWorkspaceData,
+  LearningDayData,
 } from '../types/axiom';
 import { MermaidDiagram } from '../components/MermaidDiagram';
 import { MarkdownRenderer } from '../components/MarkdownRenderer';
@@ -26,13 +27,18 @@ import {
 interface ScholarWorkspaceViewProps {
   concepts: ConceptItem[];
   workspace: ConceptWorkspaceData | null;
+  journeyDays?: LearningDayData[];
+  currentDayNumber?: number;
+  totalDurationDays?: number;
   onSelectConcept: (conceptId: number) => void;
+  onSelectDay?: (dayNumber: number) => void;
   onChangeDepth: (depth: string, format: string, useLiveLlm: boolean) => Promise<void>;
   onSubmitFeynman: (userExplanation: string, revisedExplanation?: string, uncertainties?: string) => Promise<void>;
   onReviewFlashcard: (flashcardId: number, outcome: 'again' | 'hard' | 'good' | 'easy') => Promise<void>;
   onAttemptRecall: (questionId: number, response: string) => Promise<void>;
   onSubmitThinkDeeper: (questionId: number, reasoning: string) => Promise<void>;
   onSwitchToBuilder: (conceptId: number, milestoneId: number | null) => void;
+  onSwitchToBuilderDay?: (dayNumber: number) => void;
   onExportObsidian: (exportType: 'concept' | 'think_deeper', entityId: number) => void;
 }
 
@@ -78,13 +84,18 @@ const FEYNMAN_STAGES = [
 export const ScholarWorkspaceView: React.FC<ScholarWorkspaceViewProps> = ({
   concepts,
   workspace,
+  journeyDays = [],
+  currentDayNumber,
+  totalDurationDays,
   onSelectConcept,
+  onSelectDay,
   onChangeDepth,
   onSubmitFeynman,
   onReviewFlashcard,
   onAttemptRecall,
   onSubmitThinkDeeper,
   onSwitchToBuilder,
+  onSwitchToBuilderDay,
   onExportObsidian,
 }) => {
   const [leftSidebarOpen, setLeftSidebarOpen] = useState(true);
@@ -115,9 +126,12 @@ export const ScholarWorkspaceView: React.FC<ScholarWorkspaceViewProps> = ({
   const latestFeynman = feynman_history.length > 0 ? feynman_history[feynman_history.length - 1] : null;
 
   const currentDayIdx = Math.max(0, concepts.findIndex((c) => c.id === concept.id));
-  const currentDayNum = currentDayIdx + 1;
+  const effectiveDayNum = currentDayNumber || currentDayIdx + 1;
+  const currentDayNum = effectiveDayNum;
+  const effectiveTotalDays = totalDurationDays || (journeyDays && journeyDays.length) || concepts.length || 30;
+  const activeDayData = (journeyDays || []).find((d) => d.day_number === effectiveDayNum);
   const nextConcept = currentDayIdx + 1 < concepts.length ? concepts[currentDayIdx + 1] : null;
-  const assignedFeynmanStage = FEYNMAN_STAGES[currentDayIdx % FEYNMAN_STAGES.length];
+  const assignedFeynmanStage = FEYNMAN_STAGES[(effectiveDayNum - 1) % FEYNMAN_STAGES.length];
 
   // Global locked typography: Text Serif + A3 size
   const fontClass = 'font-serif';
@@ -166,11 +180,11 @@ export const ScholarWorkspaceView: React.FC<ScholarWorkspaceViewProps> = ({
 
           <div className="flex items-center gap-2.5">
             <span className="rounded-full bg-indigo-500/15 border border-indigo-500/30 px-3 py-1 font-mono text-xs font-bold uppercase tracking-wider text-indigo-300">
-              DAY {String(currentDayNum).padStart(2, '0')} OF {concepts.length}
+              DAY {String(effectiveDayNum).padStart(2, '0')} OF {effectiveTotalDays}
             </span>
             <span className="hidden text-sm text-slate-500 sm:inline">·</span>
             <h1 className="max-w-xl truncate font-serif text-lg font-bold text-white">
-              {concept.title}
+              {activeDayData?.title || concept.title}
             </h1>
           </div>
         </div>
@@ -213,11 +227,17 @@ export const ScholarWorkspaceView: React.FC<ScholarWorkspaceViewProps> = ({
 
           <button
             type="button"
-            onClick={() => onSwitchToBuilder(concept.id, concept.builder_milestone_id)}
+            onClick={() => {
+              if (onSwitchToBuilderDay) {
+                onSwitchToBuilderDay(effectiveDayNum);
+              } else {
+                onSwitchToBuilder(concept.id, concept.builder_milestone_id);
+              }
+            }}
             className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-1.5 font-sans text-xs font-bold text-white shadow-sm hover:bg-emerald-500 transition-colors"
           >
             <Code2 className="h-4 w-4" />
-            <span>Open Day {currentDayNum} Coding Lab</span>
+            <span>Open Day {effectiveDayNum} Builder Lab</span>
             <ArrowRight className="h-3.5 w-3.5" />
           </button>
         </div>
@@ -233,65 +253,98 @@ export const ScholarWorkspaceView: React.FC<ScholarWorkspaceViewProps> = ({
                 Day-by-Day Curriculum
               </span>
               <span className="font-mono text-xs text-slate-400">
-                Day {currentDayNum} / {concepts.length}
+                Day {effectiveDayNum} / {effectiveTotalDays}
               </span>
             </div>
 
             <nav className="space-y-2.5">
-              {concepts.map((c, idx) => {
-                const isCurrent = c.id === concept.id;
-                const isMastered = c.mastery_status === 'synthesized' || c.mastery_score >= 0.8;
-                const dayNum = idx + 1;
-                const stageNum = (idx % 6) + 1;
-                return (
-                  <div
-                    key={c.id}
-                    className={`rounded-xl border p-3.5 transition-all ${
-                      isCurrent
-                        ? 'border-indigo-500/50 bg-indigo-950/40 text-white shadow-md'
-                        : 'border-slate-800/60 bg-slate-950/40 text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
-                    }`}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setActiveEmbeddedVideoUrl(null);
-                        onSelectConcept(c.id);
-                      }}
-                      className="flex w-full items-start gap-3 text-left"
+              {journeyDays && journeyDays.length > 0 ? (
+                journeyDays.map((d) => {
+                  const isCurrent = d.day_number === effectiveDayNum;
+                  const isCompleted = d.is_completed;
+                  return (
+                    <div
+                      key={d.id}
+                      className={`rounded-xl border p-3.5 transition-all ${
+                        isCurrent
+                          ? 'border-indigo-500/50 bg-indigo-950/40 text-white shadow-md'
+                          : 'border-slate-800/60 bg-slate-950/40 text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
+                      }`}
                     >
-                      <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-indigo-500/40 bg-indigo-950/60 font-mono text-xs font-bold text-indigo-300">
-                        {isMastered ? (
-                          <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                        ) : (
-                          `D${dayNum}`
-                        )}
-                      </div>
-                      <div className="flex-1 overflow-hidden">
-                        <div className="font-mono text-[10px] font-bold uppercase tracking-wider text-indigo-400">
-                          Day {String(dayNum).padStart(2, '0')} · Feynman Stage {stageNum}
-                        </div>
-                        <div className="font-serif text-[15px] font-bold leading-snug text-slate-100 mt-0.5">
-                          {c.title}
-                        </div>
-                      </div>
-                    </button>
-
-                    <div className="mt-2.5 flex items-center justify-between border-t border-slate-800/70 pt-2">
-                      <span className="font-mono text-[10px] uppercase text-slate-400">
-                        {Math.round((c.mastery_score || 0.2) * 100)}% Mastery
-                      </span>
                       <button
                         type="button"
-                        onClick={() => onSwitchToBuilder(c.id, c.builder_milestone_id)}
-                        className="inline-flex items-center gap-1 rounded-md bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 font-mono text-[10px] font-bold text-emerald-300 hover:bg-emerald-500/25"
+                        onClick={() => {
+                          setActiveEmbeddedVideoUrl(null);
+                          if (onSelectDay) {
+                            onSelectDay(d.day_number);
+                          } else if (d.scholar_concept_id) {
+                            onSelectConcept(d.scholar_concept_id);
+                          }
+                        }}
+                        className="flex w-full items-start gap-3 text-left"
                       >
-                        <Code2 className="h-3 w-3" /> Day {dayNum} Lab →
+                        <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-indigo-500/40 bg-indigo-950/60 font-mono text-xs font-bold text-indigo-300">
+                          {isCompleted ? (
+                            <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                          ) : (
+                            `D${d.day_number}`
+                          )}
+                        </div>
+                        <div className="flex-1 overflow-hidden">
+                          <div className="font-mono text-[10px] font-bold uppercase tracking-wider text-indigo-400">
+                            Day {String(d.day_number).padStart(2, '0')} · {d.phase_name.split(':')[0]}
+                          </div>
+                          <div className="font-serif text-[15px] font-bold leading-snug text-slate-100 mt-0.5 truncate">
+                            {d.title}
+                          </div>
+                        </div>
                       </button>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })
+              ) : (
+                concepts.map((c, idx) => {
+                  const isCurrent = c.id === concept.id;
+                  const isMastered = c.mastery_status === 'synthesized' || c.mastery_score >= 0.8;
+                  const dayNum = idx + 1;
+                  const stageNum = (idx % 6) + 1;
+                  return (
+                    <div
+                      key={c.id}
+                      className={`rounded-xl border p-3.5 transition-all ${
+                        isCurrent
+                          ? 'border-indigo-500/50 bg-indigo-950/40 text-white shadow-md'
+                          : 'border-slate-800/60 bg-slate-950/40 text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveEmbeddedVideoUrl(null);
+                          onSelectConcept(c.id);
+                        }}
+                        className="flex w-full items-start gap-3 text-left"
+                      >
+                        <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-indigo-500/40 bg-indigo-950/60 font-mono text-xs font-bold text-indigo-300">
+                          {isMastered ? (
+                            <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                          ) : (
+                            `D${dayNum}`
+                          )}
+                        </div>
+                        <div className="flex-1 overflow-hidden">
+                          <div className="font-mono text-[10px] font-bold uppercase tracking-wider text-indigo-400">
+                            Day {String(dayNum).padStart(2, '0')} · Feynman Stage {stageNum}
+                          </div>
+                          <div className="font-serif text-[15px] font-bold leading-snug text-slate-100 mt-0.5">
+                            {c.title}
+                          </div>
+                        </div>
+                      </button>
+                    </div>
+                  );
+                })
+              )}
             </nav>
           </aside>
         )}
@@ -306,13 +359,13 @@ export const ScholarWorkspaceView: React.FC<ScholarWorkspaceViewProps> = ({
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="rounded-lg bg-indigo-600 px-3.5 py-1 font-mono text-xs font-extrabold uppercase tracking-wider text-white">
-                    DAY {String(currentDayNum).padStart(2, '0')} MASTERCLASS
+                    DAY {String(effectiveDayNum).padStart(2, '0')} MASTERCLASS
                   </span>
                   <span className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-1 font-mono text-xs font-bold text-amber-300">
                     {assignedFeynmanStage.title.toUpperCase()}
                   </span>
                   <span className="rounded-lg border border-slate-800 bg-slate-900 px-3 py-1 font-mono text-xs uppercase text-slate-300">
-                    {concept.difficulty_level}
+                    {activeDayData?.phase_name || concept.difficulty_level}
                   </span>
                 </div>
 
@@ -336,8 +389,59 @@ export const ScholarWorkspaceView: React.FC<ScholarWorkspaceViewProps> = ({
               </div>
 
               <h1 className="font-serif text-3xl sm:text-4xl font-extrabold tracking-tight text-white leading-tight">
-                Day {currentDayNum}: {concept.title}
+                Day {effectiveDayNum}: {activeDayData?.title || concept.title}
               </h1>
+
+              {/* Pedagogical Rationale & Canonical Learning Outcomes Banner */}
+              {activeDayData && (
+                <div className="space-y-4 pt-2">
+                  {activeDayData.why_this_day && (
+                    <div className="rounded-2xl border border-indigo-500/30 bg-indigo-950/20 p-5 space-y-2">
+                      <div className="flex items-center gap-2 font-mono text-xs font-bold uppercase tracking-wider text-indigo-300">
+                        <Target className="h-4 w-4 text-indigo-400" />
+                        <span>Why This Day Occurs Here</span>
+                      </div>
+                      <p className="font-serif text-base text-slate-300 leading-relaxed">
+                        {activeDayData.why_this_day}
+                      </p>
+                    </div>
+                  )}
+
+                  {activeDayData.learning_outcomes && activeDayData.learning_outcomes.length > 0 && (
+                    <div className="rounded-2xl border border-slate-800/80 bg-slate-900/60 p-5 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 font-mono text-xs font-bold uppercase tracking-wider text-emerald-400">
+                          <CheckCircle2 className="h-4 w-4" />
+                          <span>Canonical Learning Outcomes (Shared Theory &amp; Lab Pair)</span>
+                        </div>
+                        <span className="font-mono text-xs text-slate-500">
+                          {activeDayData.learning_outcomes.length} Objectives
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                        {activeDayData.learning_outcomes.map((lo) => (
+                          <div
+                            key={lo.id}
+                            className="rounded-xl border border-slate-800 bg-slate-950/60 p-3.5 space-y-1.5"
+                          >
+                            <div className="flex items-center justify-between font-mono text-[11px]">
+                              <span className="font-bold text-emerald-400">{lo.id}</span>
+                              {lo.practice_task_id && (
+                                <span className="rounded bg-emerald-950/40 border border-emerald-500/30 px-1.5 py-0.5 text-emerald-300">
+                                  Practised by {lo.practice_task_id}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-sm text-slate-200 font-sans leading-normal">
+                              {lo.description}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* 3-Pillar Progression Overview Strip */}
               <div className="grid grid-cols-1 gap-3 pt-2 sm:grid-cols-3">
@@ -1130,10 +1234,10 @@ export const ScholarWorkspaceView: React.FC<ScholarWorkspaceViewProps> = ({
                   <Target className="h-7 w-7 text-emerald-400 shrink-0" />
                   <div>
                     <div className="font-mono text-xs font-bold uppercase tracking-wider text-emerald-400">
-                      COMPLETED DAY {currentDayNum} THEORY, FEYNMAN &amp; RECALL?
+                      COMPLETED DAY {effectiveDayNum} THEORY, FEYNMAN &amp; RECALL?
                     </div>
                     <div className="font-serif text-xl font-bold text-white">
-                      Now build and verify Day {currentDayNum}&apos;s implementation in the Builder Road Lab
+                      Now build and verify Day {effectiveDayNum}&apos;s practical implementation in the Builder Lab
                     </div>
                   </div>
                 </div>
@@ -1141,22 +1245,32 @@ export const ScholarWorkspaceView: React.FC<ScholarWorkspaceViewProps> = ({
                 <div className="flex flex-wrap items-center gap-3">
                   <button
                     type="button"
-                    onClick={() => onSwitchToBuilder(concept.id, concept.builder_milestone_id)}
+                    onClick={() => {
+                      if (onSwitchToBuilderDay) {
+                        onSwitchToBuilderDay(effectiveDayNum);
+                      } else {
+                        onSwitchToBuilder(concept.id, concept.builder_milestone_id);
+                      }
+                    }}
                     className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 font-sans text-xs font-extrabold uppercase tracking-wider text-white hover:bg-emerald-500 shadow-lg transition-all"
                   >
-                    <Code2 className="h-4 w-4" /> Launch Day {currentDayNum} Builder Lab →
+                    <Code2 className="h-4 w-4" /> Launch Day {effectiveDayNum} Builder Lab →
                   </button>
 
-                  {nextConcept && (
+                  {effectiveDayNum < effectiveTotalDays && (
                     <button
                       type="button"
                       onClick={() => {
                         setActiveEmbeddedVideoUrl(null);
-                        onSelectConcept(nextConcept.id);
+                        if (onSelectDay) {
+                          onSelectDay(effectiveDayNum + 1);
+                        } else if (nextConcept) {
+                          onSelectConcept(nextConcept.id);
+                        }
                       }}
                       className="inline-flex items-center gap-2 rounded-xl border border-indigo-500/40 bg-indigo-950/40 px-5 py-3 font-sans text-xs font-extrabold uppercase tracking-wider text-indigo-200 hover:bg-indigo-900/60 hover:text-white transition-all"
                     >
-                      <span>Advance to Day {currentDayNum + 1}</span>
+                      <span>Advance to Day {effectiveDayNum + 1}</span>
                       <ArrowRight className="h-4 w-4" />
                     </button>
                   )}

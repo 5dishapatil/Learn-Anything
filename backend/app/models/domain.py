@@ -100,6 +100,7 @@ class LearningJourney(Base):
     duration_days: Mapped[int] = mapped_column(Integer, default=30)
     existing_knowledge: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     final_project_goal: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    intake_profile_json: Mapped[dict] = mapped_column(JSON, default=dict)
     status: Mapped[str] = mapped_column(String(30), default="active")
     progress_percent: Mapped[float] = mapped_column(Float, default=0.0)
     current_road: Mapped[str] = mapped_column(String(30), default="scholar")
@@ -969,6 +970,9 @@ class BackupRecord(Base):
 class LearningDay(Base):
     """First-class model representing a structured day of study, practice, or milestone."""
     __tablename__ = "learning_days"
+    __table_args__ = (
+        UniqueConstraint("journey_id", "day_number", name="uq_journey_day"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     journey_id: Mapped[int] = mapped_column(
@@ -983,12 +987,17 @@ class LearningDay(Base):
         String(40), default="lesson"
     )  # lesson | practice | review | project | assessment | research | rest | catch_up
     estimated_minutes: Mapped[int] = mapped_column(Integer, default=90)
+    why_this_day: Mapped[str] = mapped_column(Text, default="")
+    prerequisites_json: Mapped[list] = mapped_column(JSON, default=list)
+    introduced_concepts_json: Mapped[list] = mapped_column(JSON, default=list)
+    learning_outcomes_json: Mapped[list] = mapped_column(JSON, default=list)
 
     # Scholar road linkage
     scholar_concept_id: Mapped[Optional[int]] = mapped_column(
         Integer, ForeignKey("concepts.id", ondelete="SET NULL"), nullable=True
     )
     scholar_objective: Mapped[str] = mapped_column(Text, default="")
+    scholar_content_markdown: Mapped[str] = mapped_column(Text, default="")
     youtube_search_query: Mapped[str] = mapped_column(String(255), default="")
     youtube_video_id: Mapped[str] = mapped_column(String(60), default="")
     youtube_video_title: Mapped[str] = mapped_column(String(255), default="")
@@ -996,12 +1005,21 @@ class LearningDay(Base):
     # Builder road linkage
     builder_lab_title: Mapped[str] = mapped_column(String(255), default="")
     builder_lab_mission: Mapped[str] = mapped_column(Text, default="")
+    builder_content_markdown: Mapped[str] = mapped_column(Text, default="")
+    builder_activity_type: Mapped[str] = mapped_column(String(60), default="code_lab")
     builder_starter_code: Mapped[str] = mapped_column(Text, default="")
     builder_test_cases_json: Mapped[list] = mapped_column(JSON, default=list)
     builder_hints_json: Mapped[list] = mapped_column(JSON, default=list)
-    builder_completed: Mapped[bool] = mapped_column(Boolean, default=False)
+    builder_rubric_json: Mapped[list] = mapped_column(JSON, default=list)
+
+    # Assessment linkage
+    assessment_json: Mapped[dict] = mapped_column(JSON, default=dict)
 
     # Status & Progress
+    generation_status: Mapped[str] = mapped_column(String(40), default="planned")  # planned | synthesized | ready
+    scholar_completed: Mapped[bool] = mapped_column(Boolean, default=False)
+    builder_completed: Mapped[bool] = mapped_column(Boolean, default=False)
+    assessment_completed: Mapped[bool] = mapped_column(Boolean, default=False)
     is_completed: Mapped[bool] = mapped_column(Boolean, default=False)
     completion_score: Mapped[float] = mapped_column(Float, default=0.0)
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)

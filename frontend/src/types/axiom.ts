@@ -68,6 +68,71 @@ export interface JourneySummaryProject {
   milestone_count: number;
 }
 
+export interface LearningOutcomeItem {
+  id: string;
+  outcome_id?: string;
+  title?: string;
+  description: string;
+  builder_task_id?: string;
+  practice_task_id?: string;
+  practice_format?: string;
+  evidence_criteria?: string;
+}
+
+export interface LearningDayData {
+  id: number;
+  journey_id: number;
+  day_number: number;
+  title: string;
+  theme: string;
+  phase_name: string;
+  week_number: number;
+  day_type: string;
+  estimated_minutes: number;
+  why_this_day?: string;
+  prerequisites?: string[];
+  introduced_concepts?: string[];
+  learning_outcomes?: LearningOutcomeItem[];
+  scholar_concept_id?: number | null;
+  scholar_objective?: string;
+  scholar_content_markdown?: string;
+  youtube_search_query?: string;
+  youtube_video_id?: string;
+  youtube_video_title?: string;
+  builder_lab_title?: string;
+  builder_lab_mission?: string;
+  builder_content_markdown?: string;
+  builder_activity_type?: string;
+  builder_starter_code?: string;
+  builder_test_cases?: Array<{ name: string; test_type?: string; description?: string }>;
+  builder_hints?: string[];
+  builder_rubric?: any;
+  assessment?: {
+    recall_question?: string;
+    think_deeper_question?: string;
+  };
+  generation_status?: 'planned' | 'synthesized' | 'ready' | string;
+  scholar_completed?: boolean;
+  builder_completed?: boolean;
+  assessment_completed?: boolean;
+  is_completed: boolean;
+  completion_score: number;
+  feynman_stage: number;
+}
+
+export interface GenerationJobData {
+  job_id: string;
+  journey_id?: number | null;
+  job_type: string;
+  status: 'pending' | 'running' | 'completed' | 'failed' | string;
+  progress_percent: number;
+  current_step: string;
+  total_steps: number;
+  completed_steps: number;
+  error_message?: string | null;
+  result?: Record<string, any>;
+}
+
 export interface LearningJourneyData {
   id: number;
   title: string;
@@ -81,6 +146,7 @@ export interface LearningJourneyData {
   duration_days: number;
   existing_knowledge?: string | null;
   final_project_goal?: string | null;
+  intake_profile?: Record<string, any>;
   status: string;
   progress_percent: number;
   current_road: 'scholar' | 'builder' | string;
@@ -89,6 +155,7 @@ export interface LearningJourneyData {
   last_active_at: string | null;
   blueprint: BlueprintData | null;
   concepts: ConceptItem[];
+  days: LearningDayData[];
   projects: JourneySummaryProject[];
   tasks: LearningTaskItem[];
 }

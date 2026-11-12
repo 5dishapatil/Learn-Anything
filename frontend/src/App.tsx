@@ -5,6 +5,8 @@ import {
   ConceptWorkspaceData,
   ExperimentData,
   LearningJourneyData,
+  LearningDayData,
+  GenerationJobData,
   ProjectFullData,
   ResourceDiscoveryResponse,
   ThinkDeeperQuestionItem,
@@ -140,6 +142,14 @@ export function App() {
   const [learningFormat, setLearningFormat] = useState('combined');
   const [existingKnowledge, setExistingKnowledge] = useState('');
   const [finalGoal, setFinalGoal] = useState('');
+  const [currentDayNumber, setCurrentDayNumber] = useState<number>(1);
+  const [specificResearchFocus, setSpecificResearchFocus] = useState<string>('');
+  const [intakeTools, setIntakeTools] = useState<string>('');
+  const [intakePastProjects, setIntakePastProjects] = useState<string>('');
+  const [intakeGaps, setIntakeGaps] = useState<string>('');
+  const [intakeUnresolvedProblems, setIntakeUnresolvedProblems] = useState<string>('');
+  const [intakePapers, setIntakePapers] = useState<string>('');
+  const [activeJob, setActiveJob] = useState<GenerationJobData | null>(null);
   const [creatingJourney, setCreatingJourney] = useState(false);
   const [generationStageText, setGenerationStageText] = useState('');
   const [showAdvancedOnboarding, setShowAdvancedOnboarding] = useState(false);
@@ -343,6 +353,17 @@ export function App() {
     }, 3200);
 
     try {
+      const intakeProfile = {
+        experience_level: expLevel,
+        prior_topics_understood: existingKnowledge || undefined,
+        tools_and_languages_used: intakeTools || undefined,
+        previous_projects_completed: intakePastProjects || undefined,
+        specific_gaps_to_bridge: intakeGaps || undefined,
+        target_next_level_goal: finalGoal || undefined,
+        unresolved_problems: intakeUnresolvedProblems || undefined,
+        papers_or_frameworks_to_replicate: intakePapers || undefined,
+      };
+
       const created = await axiomApi.createJourney({
         user_intent: intentInput,
         experience_level: expLevel,
@@ -353,7 +374,10 @@ export function App() {
         preferred_format: learningFormat,
         existing_knowledge: existingKnowledge || undefined,
         final_project_goal: finalGoal || undefined,
+        specific_research_focus: specificResearchFocus || undefined,
+        intake_profile: intakeProfile,
       });
+      setCurrentDayNumber(1);
       const [jList, pList, dash, tdList] = await Promise.all([
         axiomApi.listJourneys(),
         axiomApi.listProjects(),
@@ -1314,6 +1338,126 @@ export function App() {
                       })}
                     </div>
 
+                    {/* Dynamic Expertise-Level Intake Questionnaire */}
+                    {expLevel === 'beginner' && (
+                      <div className="rounded-xl border border-emerald-500/30 bg-emerald-950/20 p-4 space-y-3">
+                        <div className="flex items-center gap-2 font-mono text-xs font-bold uppercase text-emerald-400">
+                          <Sparkles className="h-4 w-4" /> Zero-Assumed-Knowledge Onboarding
+                        </div>
+                        <p className="font-serif text-sm text-slate-200">
+                          Axiom starts from absolute physical and mathematical primitives. Day 1 builds foundational intuition before introducing formal notations or advanced equations.
+                        </p>
+                        <div className="space-y-1.5">
+                          <label className="font-mono text-xs text-slate-300">What is your ultimate dream project or goal with this topic?</label>
+                          <input
+                            type="text"
+                            value={finalGoal}
+                            onChange={(e) => setFinalGoal(e.target.value)}
+                            placeholder="e.g. Build an end-to-end EEG motor-imagery classifier and understand neural dynamics"
+                            className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3.5 py-2 text-sm text-white focus:border-indigo-500 focus:outline-none"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {expLevel === 'intermediate' && (
+                      <div className="rounded-xl border border-indigo-500/30 bg-indigo-950/20 p-4 space-y-3">
+                        <div className="flex items-center gap-2 font-mono text-xs font-bold uppercase text-indigo-300">
+                          <Target className="h-4 w-4" /> Prior Knowledge &amp; Gap Bridging
+                        </div>
+                        <p className="font-serif text-sm text-slate-200">
+                          Tell us what you already know so Axiom skips repetitive basics and focuses on bridging your foundational gaps to high-level mastery.
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                            <label className="font-mono text-xs text-slate-300">Prior Concepts / Theory Mastered</label>
+                            <input
+                              type="text"
+                              value={existingKnowledge}
+                              onChange={(e) => setExistingKnowledge(e.target.value)}
+                              placeholder="e.g. Linear algebra, gradient descent, basic PyTorch"
+                              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs sm:text-sm text-white focus:border-indigo-500 focus:outline-none"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="font-mono text-xs text-slate-300">Tools / Languages / Libraries Used</label>
+                            <input
+                              type="text"
+                              value={intakeTools}
+                              onChange={(e) => setIntakeTools(e.target.value)}
+                              placeholder="e.g. Python, NumPy, SciPy, MNE-Python"
+                              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs sm:text-sm text-white focus:border-indigo-500 focus:outline-none"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="font-mono text-xs text-slate-300">Previous Projects or Systems Built</label>
+                            <input
+                              type="text"
+                              value={intakePastProjects}
+                              onChange={(e) => setIntakePastProjects(e.target.value)}
+                              placeholder="e.g. Simple CNN digit classifier, bandpass filter script"
+                              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs sm:text-sm text-white focus:border-indigo-500 focus:outline-none"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="font-mono text-xs text-slate-300">Specific Gaps You Want to Bridge</label>
+                            <input
+                              type="text"
+                              value={intakeGaps}
+                              onChange={(e) => setIntakeGaps(e.target.value)}
+                              placeholder="e.g. Mathematical derivation of spatial filtering, real-time buffer sync"
+                              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs sm:text-sm text-white focus:border-indigo-500 focus:outline-none"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {expLevel === 'advanced' && (
+                      <div className="rounded-xl border border-purple-500/30 bg-purple-950/20 p-4 space-y-3">
+                        <div className="flex items-center gap-2 font-mono text-xs font-bold uppercase text-purple-300">
+                          <Flame className="h-4 w-4" /> Frontier Research &amp; Advanced Specialization
+                        </div>
+                        <p className="font-serif text-sm text-slate-200">
+                          Elementary primitives will be omitted. Axiom structures the roadmap around state-of-the-art papers, novel hypotheses, open problems, and production-grade architectures.
+                        </p>
+                        <div className="space-y-3">
+                          <div className="space-y-1">
+                            <label className="font-mono text-xs text-slate-300">Specific Research Focus / Subfield Specialization</label>
+                            <input
+                              type="text"
+                              value={specificResearchFocus}
+                              onChange={(e) => setSpecificResearchFocus(e.target.value)}
+                              placeholder="e.g. Biologically plausible credit assignment, predictive coding, STDP"
+                              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3.5 py-2 text-sm text-white focus:border-indigo-500 focus:outline-none"
+                            />
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div className="space-y-1">
+                              <label className="font-mono text-xs text-slate-300">Unresolved Problems / Engineering Bottlenecks</label>
+                              <input
+                                type="text"
+                                value={intakeUnresolvedProblems}
+                                onChange={(e) => setIntakeUnresolvedProblems(e.target.value)}
+                                placeholder="e.g. Catastrophic forgetting in continuous neuromorphic streams"
+                                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs sm:text-sm text-white focus:border-indigo-500 focus:outline-none"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="font-mono text-xs text-slate-300">Benchmark Papers / Systems to Replicate</label>
+                              <input
+                                type="text"
+                                value={intakePapers}
+                                onChange={(e) => setIntakePapers(e.target.value)}
+                                placeholder="e.g. Rao & Ballard 1999, Lillicrap 2016 Feedback Alignment"
+                                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs sm:text-sm text-white focus:border-indigo-500 focus:outline-none"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Road Mode Selector */}
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 pt-1">
                       {[
@@ -1942,6 +2086,10 @@ export function App() {
             <ScholarWorkspaceView
               concepts={activeJourney?.concepts || []}
               workspace={conceptWorkspace}
+              journeyDays={activeJourney?.days || []}
+              currentDayNumber={currentDayNumber}
+              totalDurationDays={activeJourney?.duration_days || activeJourney?.days?.length || 30}
+              onSelectDay={(dNum) => setCurrentDayNumber(dNum)}
               onSelectConcept={async (cId) => {
                 const cw = await axiomApi.getConceptWorkspace(cId);
                 setConceptWorkspace(cw);
@@ -1958,6 +2106,8 @@ export function App() {
                   const p = await axiomApi.getProject(effectiveProject.id);
                   setActiveProject(p);
                 }
+                const jList = await axiomApi.listJourneys();
+                setJourneys(jList);
                 pushToast(
                   `Deep-Synthesized Day Content & Lab (${depth.toUpperCase()})`,
                   'Generated with qwen3.5:9b + Verified YouTube & Web Grounding',
@@ -1995,6 +2145,10 @@ export function App() {
                 pushToast('Socratic Inquiry Evaluated', 'Earned +75 XP.', 'success');
               }}
               onSwitchToBuilder={(cId, mId) => handleSwitchRoad('builder', cId, mId)}
+              onSwitchToBuilderDay={(dNum) => {
+                setCurrentDayNumber(dNum);
+                setActiveNav('builder');
+              }}
               onExportObsidian={(type, id) => handleExportObsidian(type, id)}
             />
           )}
@@ -2006,6 +2160,10 @@ export function App() {
             <BuilderWorkspaceView
               project={effectiveProject}
               selectedMilestoneId={selectedMilestoneId}
+              journeyDays={activeJourney?.days || []}
+              currentDayNumber={currentDayNumber}
+              totalDurationDays={activeJourney?.duration_days || activeJourney?.days?.length || 30}
+              onSelectDay={(dNum) => setCurrentDayNumber(dNum)}
               onSelectMilestone={(mId) => setSelectedMilestoneId(mId)}
               onUnlockHint={async (mId, lvl) => {
                 await axiomApi.unlockMilestoneHint(mId, lvl);
@@ -2036,6 +2194,26 @@ export function App() {
                 );
                 return res;
               }}
+              onVerifyDayLab={async (dNum, code) => {
+                if (!activeJourney) return null;
+                const res = await axiomApi.verifyDayLab(activeJourney.id, dNum, { code_submission: code });
+                pushToast(
+                  res.passed ? `Day ${dNum} All Test Cases Passed!` : `Day ${dNum} Test Case Failed`,
+                  (res as any).execution_engine || res.execution_sandbox || 'Isolated Sandbox',
+                  res.passed ? 'success' : 'warning'
+                );
+                return res;
+              }}
+              onCompleteDay={async (dNum) => {
+                if (!activeJourney) return;
+                await axiomApi.markDayCompleted(activeJourney.id, dNum);
+                const jList = await axiomApi.listJourneys();
+                setJourneys(jList);
+                pushToast('Day Builder Lab Completed! +100 XP', `Day ${dNum} marked completed.`, 'success');
+                if (dNum < (activeJourney.days?.length || 0)) {
+                  setCurrentDayNumber(dNum + 1);
+                }
+              }}
               onSubmitReflection={async (payload) => {
                 await axiomApi.createReflection(payload);
                 const kw = await axiomApi.getKnowledgeWorkspace();
@@ -2043,6 +2221,10 @@ export function App() {
                 pushToast('Reflection Saved', 'Indexed in your Personal Knowledge Workspace.', 'success');
               }}
               onSwitchToScholar={(cId) => handleSwitchRoad('scholar', cId)}
+              onSwitchToScholarDay={(dNum) => {
+                setCurrentDayNumber(dNum);
+                setActiveNav('scholar');
+              }}
               onOpenExperimentLab={() => setActiveNav('experiments')}
               onGoToPlanner={() => setActiveNav('explore')}
               onSynthesizeDayLab={async (cId) => {
@@ -2056,6 +2238,8 @@ export function App() {
                   const p = await axiomApi.getProject(effectiveProject.id);
                   setActiveProject(p);
                 }
+                const jList = await axiomApi.listJourneys();
+                setJourneys(jList);
                 pushToast(
                   'Synthesized Bespoke Day Python Lab!',
                   'Updated code & 3 test cases with qwen3.5:9b.',

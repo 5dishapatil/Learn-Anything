@@ -1,6 +1,8 @@
 import {
   ConceptWorkspaceData,
   ExperimentData,
+  GenerationJobData,
+  LearningDayData,
   LearningJourneyData,
   ProjectFullData,
   ResourceDiscoveryResponse,
@@ -39,11 +41,52 @@ export const axiomApi = {
     preferred_format: string;
     existing_knowledge?: string;
     final_project_goal?: string;
+    specific_research_focus?: string;
+    intake_profile?: Record<string, any>;
   }) =>
     requestJson<LearningJourneyData>(`${API_BASE}/journeys`, {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
+  getJourneyDays: (journeyId: number) => requestJson<LearningDayData[]>(`${API_BASE}/journeys/${journeyId}/days`),
+  getJourneyDayDetail: (journeyId: number, dayNumber: number, deepSynthesize: boolean = false) =>
+    requestJson<LearningDayData>(
+      `${API_BASE}/journeys/${journeyId}/days/${dayNumber}${deepSynthesize ? '?deep_synthesize=true' : ''}`
+    ),
+  verifyDayLab: (
+    journeyId: number,
+    dayNumber: number,
+    payload: { code_submission?: string; text_submission?: string }
+  ) =>
+    requestJson<{
+      passed: boolean;
+      output: string;
+      execution_sandbox: string;
+      test_case_results: Array<{ name: string; passed: boolean; error?: string | null }>;
+    }>(`${API_BASE}/journeys/${journeyId}/days/${dayNumber}/verify-lab`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  markDayCompleted: (journeyId: number, dayNumber: number) =>
+    requestJson<{
+      success: boolean;
+      day_number: number;
+      is_completed: boolean;
+      journey_progress_percent: number;
+    }>(`${API_BASE}/journeys/${journeyId}/days/${dayNumber}/complete`, {
+      method: 'POST',
+    }),
+  getJobStatus: (jobId: string) => requestJson<GenerationJobData>(`${API_BASE}/jobs/${jobId}`),
+  getJourneyActiveJob: (journeyId: number) =>
+    requestJson<{
+      has_job: boolean;
+      job_id?: string;
+      status?: string;
+      progress_percent?: number;
+      current_step?: string;
+      total_steps?: number;
+      completed_steps?: number;
+    }>(`${API_BASE}/journeys/${journeyId}/active-job`),
   deleteJourney: (journeyId: number) =>
     requestJson<{ deleted: boolean; journey_id: number; title: string }>(`${API_BASE}/journeys/${journeyId}`, {
       method: 'DELETE',

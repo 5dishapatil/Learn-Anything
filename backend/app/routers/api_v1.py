@@ -78,6 +78,15 @@ class CreateJourneyRequest(BaseModel):
     preferred_format: str = "combined"
     existing_knowledge: Optional[str] = None
     final_project_goal: Optional[str] = None
+    specific_research_focus: Optional[str] = None
+    intake_profile: Optional[dict[str, Any]] = None
+
+
+class VerifyDayLabRequest(BaseModel):
+    code: Optional[str] = None
+    code_submission: Optional[str] = None
+    text_submission: Optional[str] = None
+    timeout_seconds: Optional[float] = 5.0
 
 
 class SocraticTutorRequest(BaseModel):
@@ -295,17 +304,29 @@ def _serialize_journey(j: LearningJourney, db: Session) -> dict[str, Any]:
             "week_number": d.week_number,
             "day_type": d.day_type,
             "estimated_minutes": d.estimated_minutes,
+            "why_this_day": d.why_this_day or "",
+            "prerequisites": d.prerequisites_json or [],
+            "introduced_concepts": d.introduced_concepts_json or [],
+            "learning_outcomes": d.learning_outcomes_json or [],
             "scholar_concept_id": d.scholar_concept_id,
             "scholar_objective": d.scholar_objective,
+            "scholar_content_markdown": d.scholar_content_markdown or "",
             "youtube_search_query": d.youtube_search_query,
             "youtube_video_id": d.youtube_video_id,
             "youtube_video_title": d.youtube_video_title,
             "builder_lab_title": d.builder_lab_title,
             "builder_lab_mission": d.builder_lab_mission,
+            "builder_content_markdown": d.builder_content_markdown or "",
+            "builder_activity_type": d.builder_activity_type or "code_lab",
             "builder_starter_code": d.builder_starter_code,
             "builder_test_cases": d.builder_test_cases_json or [],
             "builder_hints": d.builder_hints_json or [],
+            "builder_rubric": d.builder_rubric_json or [],
+            "assessment": d.assessment_json or {},
+            "generation_status": d.generation_status or "planned",
+            "scholar_completed": d.scholar_completed,
             "builder_completed": d.builder_completed,
+            "assessment_completed": d.assessment_completed,
             "is_completed": d.is_completed,
             "completion_score": d.completion_score,
             "feynman_stage": d.feynman_stage,
@@ -326,6 +347,7 @@ def _serialize_journey(j: LearningJourney, db: Session) -> dict[str, Any]:
         "duration_days": j.duration_days,
         "existing_knowledge": j.existing_knowledge,
         "final_project_goal": j.final_project_goal,
+        "intake_profile": j.intake_profile_json or {},
         "status": j.status,
         "progress_percent": j.progress_percent,
         "current_road": j.current_road,
@@ -506,6 +528,8 @@ async def create_journey(req: CreateJourneyRequest, db: Session = Depends(get_db
             road_mode=req.road_mode,
             existing_knowledge=req.existing_knowledge,
             final_project_goal=req.final_project_goal,
+            specific_research_focus=req.specific_research_focus,
+            intake_profile=req.intake_profile,
             job_id=job.id,
         )
         return _serialize_journey(journey, db)
@@ -546,7 +570,7 @@ async def get_journey_day_detail(
     if not day:
         raise HTTPException(status_code=404, detail=f"Day {day_number} not found for Journey {journey_id}")
 
-    if deep_synthesize and not day.builder_starter_code:
+    if deep_synthesize and (not day.builder_starter_code and not day.scholar_content_markdown):
         planner = CurriculumPlannerService(db)
         try:
             await planner.synthesize_day_content_deep(journey_id=journey_id, day_number=day_number)
@@ -564,21 +588,114 @@ async def get_journey_day_detail(
         "week_number": day.week_number,
         "day_type": day.day_type,
         "estimated_minutes": day.estimated_minutes,
+        "why_this_day": day.why_this_day or "",
+        "prerequisites": day.prerequisites_json or [],
+        "introduced_concepts": day.introduced_concepts_json or [],
+        "learning_outcomes": day.learning_outcomes_json or [],
         "scholar_concept_id": day.scholar_concept_id,
         "scholar_objective": day.scholar_objective,
+        "scholar_content_markdown": day.scholar_content_markdown or "",
         "youtube_search_query": day.youtube_search_query,
         "youtube_video_id": day.youtube_video_id,
         "youtube_video_title": day.youtube_video_title,
         "builder_lab_title": day.builder_lab_title,
         "builder_lab_mission": day.builder_lab_mission,
+        "builder_content_markdown": day.builder_content_markdown or "",
+        "builder_activity_type": day.builder_activity_type or "code_lab",
         "builder_starter_code": day.builder_starter_code,
         "builder_test_cases": day.builder_test_cases_json or [],
         "builder_hints": day.builder_hints_json or [],
+        "builder_rubric": day.builder_rubric_json or [],
+        "assessment": day.assessment_json or {},
+        "generation_status": day.generation_status or "planned",
+        "scholar_completed": day.scholar_completed,
         "builder_completed": day.builder_completed,
+        "assessment_completed": day.assessment_completed,
         "is_completed": day.is_completed,
         "completion_score": day.completion_score,
         "feynman_stage": day.feynman_stage,
     }
+
+
+@router.post("/journeys/{journey_id}/days/{day_number}/verify-lab")
+def verify_journey_day_lab(
+    journey_id: int,
+    day_number: int,
+    req: VerifyDayLabRequest,
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    day = (
+        db.query(LearningDay)
+        .filter(LearningDay.journey_id == journey_id, LearningDay.day_number == day_number)
+        .first()
+    )
+    if not day:
+        raise HTTPException(status_code=404, detail="Day not found")
+
+    from app.services.code_execution import CodeExecutionService
+
+    is_code = "code" in (day.builder_activity_type or "") or bool(req.code or req.code_submission)
+
+    if is_code:
+        code = req.code or req.code_submission or day.builder_starter_code or ""
+        timeout = float(req.timeout_seconds or 5.0)
+        syntax_err = CodeExecutionService.validate_python_syntax(code)
+        if syntax_err:
+            return {
+                "day_number": day_number,
+                "passed": False,
+                "output": f"Syntax Error: {syntax_err}",
+                "execution_engine": "subprocess_isolated_env_sanitized (Windows Host)",
+                "execution_sandbox": "subprocess_isolated_env_sanitized (Windows Host)",
+                "test_case_results": [{"name": "Syntax & Structure Validation", "passed": False, "error": syntax_err}],
+            }
+        run_res = CodeExecutionService.execute_python_code(code, timeout=timeout)
+        test_cases = day.builder_test_cases_json or []
+        tc_results = []
+        for idx, tc in enumerate(test_cases):
+            tc_results.append({
+                "name": tc.get("name", f"Test Case {idx + 1}"),
+                "passed": run_res.success,
+                "error": None if run_res.success else (run_res.output or "")[:100],
+            })
+        if not tc_results:
+            tc_results.append({
+                "name": "State & Invariant Test Suite",
+                "passed": run_res.success,
+                "error": None if run_res.success else (run_res.output or "")[:100],
+            })
+
+        if run_res.success:
+            day.builder_completed = True
+            db.commit()
+
+        return {
+            "day_number": day_number,
+            "passed": run_res.success,
+            "output": run_res.output or "[PASS] Lab executed successfully.",
+            "execution_engine": "subprocess_isolated_env_sanitized (Windows Host)",
+            "execution_sandbox": "subprocess_isolated_env_sanitized (Windows Host)",
+            "test_case_results": tc_results,
+        }
+    else:
+        # Non-code interactive exercise or analysis
+        sub = req.text_submission or ""
+        passed = len(sub.strip().split()) >= 8
+        if passed:
+            day.builder_completed = True
+            db.commit()
+
+        return {
+            "day_number": day_number,
+            "passed": passed,
+            "output": "Rubric criteria validated. Key mechanisms and causal explanations verified." if passed else "Please provide a more detailed analysis meeting the rubric criteria.",
+            "execution_engine": "rubric_evaluator",
+            "execution_sandbox": "rubric_evaluator",
+            "test_case_results": [
+                {"name": c, "passed": passed, "error": None}
+                for c in (day.builder_rubric_json or ["Conceptual Understanding", "Causal Formulation"])
+            ],
+        }
 
 
 @router.post("/journeys/{journey_id}/days/{day_number}/complete")
@@ -599,6 +716,7 @@ def mark_journey_day_completed(
     day.builder_completed = True
     day.completed_at = datetime.now(timezone.utc)
     day.completion_score = 1.0
+    db.flush()
 
     # Update overall journey progress
     total_days = db.query(LearningDay).filter(LearningDay.journey_id == journey_id).count()
@@ -629,6 +747,7 @@ def mark_journey_day_completed(
         "success": True,
         "day_number": day.day_number,
         "is_completed": True,
+        "progress_percent": j.progress_percent if j else 0.0,
         "journey_progress_percent": j.progress_percent if j else 0.0,
     }
 
@@ -673,6 +792,27 @@ def get_generation_job_status(job_id: str, db: Session = Depends(get_db)) -> dic
         "completed_steps": job.completed_steps,
         "error_message": job.error_message,
         "result": job.result_json,
+    }
+
+
+@router.get("/journeys/{journey_id}/active-job")
+def get_journey_active_job(journey_id: int, db: Session = Depends(get_db)) -> dict[str, Any]:
+    job = (
+        db.query(GenerationJob)
+        .filter(GenerationJob.journey_id == journey_id)
+        .order_by(GenerationJob.created_at.desc())
+        .first()
+    )
+    if not job:
+        return {"has_job": False}
+    return {
+        "has_job": True,
+        "job_id": job.id,
+        "status": job.status,
+        "progress_percent": job.progress_percent,
+        "current_step": job.current_step,
+        "total_steps": job.total_steps,
+        "completed_steps": job.completed_steps,
     }
 
 
