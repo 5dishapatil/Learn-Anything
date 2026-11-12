@@ -46,6 +46,19 @@ def upgrade() -> None:
         if col_name not in day_cols:
             op.add_column("learning_days", col_def)
 
+    # Deduplicate any pre-existing duplicates before applying unique constraint
+    try:
+        bind.execute(sa.text("""
+            DELETE FROM learning_days 
+            WHERE id NOT IN (
+                SELECT MIN(id) 
+                FROM learning_days 
+                GROUP BY journey_id, day_number
+            )
+        """))
+    except Exception:
+        pass
+
     # Unique index on (journey_id, day_number)
     existing_indexes = [idx["name"] for idx in inspector.get_indexes("learning_days")]
     if "uq_journey_day" not in existing_indexes and "idx_journey_day_unique" not in existing_indexes:
@@ -56,5 +69,26 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # SQLite has limited ALTER TABLE DROP COLUMN support in older versions, batch mode handled if needed
-    pass
+    bind = op.get_bind()
+    inspector = Inspector.from_engine(bind)
+    existing_indexes = [idx["name"] for idx in inspector.get_indexes("learning_days")]
+    if "uq_journey_day" in existing_indexes:
+        op.drop_index("uq_journey_day", table_name="learning_days")
+
+    with op.batch_alter_table("learning_days") as batch_op:
+        for col in [
+            "why_this_day", "prerequisites_json", "introduced_concepts_json",
+            "learning_outcomes_json", "scholar_content_markdown", "builder_content_markdown",
+            "builder_activity_type", "builder_rubric_json", "assessment_json",
+            "generation_status", "scholar_completed", "assessment_completed",
+        ]:
+            try:
+                batch_op.drop_column(col)
+            except Exception:
+                pass
+
+    with op.batch_alter_table("learning_journeys") as batch_op:
+        try:
+            batch_op.drop_column("intake_profile_json")
+        except Exception:
+            pass

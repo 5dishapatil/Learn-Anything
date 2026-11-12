@@ -7,6 +7,7 @@ Music (Piano/Guitar), Languages (French/Spanish), History, Literature/Creative W
 from __future__ import annotations
 
 import math
+import re
 from typing import Any, Optional
 
 
@@ -419,11 +420,171 @@ class DomainIntelligenceService:
                 "Independent Strategic Case & Valuation Capstone",
             ],
         ),
+        "photography_visual_arts": DomainProfile(
+            domain_key="photography_visual_arts",
+            display_name="Photography & Visual Storytelling",
+            foundational_prerequisites=[
+                "Light physics, camera anatomy & sensor mechanics",
+                "Exposure triangle: Aperture, Shutter Speed, ISO",
+                "Framing, focal length & point of view",
+            ],
+            core_knowledge_areas=[
+                "Exposure triangle mechanics & manual shooting",
+                "Focal length, optics, depth of field & hyperfocal distance",
+                "Compositional geometries (rule of thirds, leading lines, golden ratio)",
+                "Natural vs artificial lighting & directional contrast",
+                "Color theory, dynamic range & RAW histogram exposure",
+                "Documentary, street, portrait & landscape field practices",
+                "Post-processing, color grading & curatorial portfolio review",
+            ],
+            practice_activity_types=[
+                "photo_shoot",
+                "exposure_drill",
+                "composition_critique",
+                "lighting_setup",
+            ],
+            default_builder_activity="photo_shoot",
+            assessment_methods=[
+                "Histogram balance & exposure accuracy review",
+                "Compositional intentionality defense",
+                "Lighting setup & tonal graduation rubric",
+            ],
+            sample_phase_templates=[
+                "Camera Anatomy & Exposure Triangle Primitives",
+                "Optics, Focus Mechanics & Depth of Field Control",
+                "Compositional Geometry & Visual Grammar",
+                "Lighting Direction, Quality & Contrast Mastery",
+                "Field Practicum & Curated Portfolio Review",
+            ],
+        ),
+        "law_jurisprudence": DomainProfile(
+            domain_key="law_jurisprudence",
+            display_name="Law, Jurisprudence & Legal Reasoning",
+            foundational_prerequisites=[
+                "Constitutional frameworks & separation of powers",
+                "Hierarchy of legal authority (statutes, regulations, precedents)",
+                "IRAC analytical framework (Issue, Rule, Application, Conclusion)",
+            ],
+            core_knowledge_areas=[
+                "Statutory interpretation & legislative intent",
+                "Common law doctrine, precedent & stare decisis",
+                "Constitutional rights, balance of power & judicial review",
+                "Contractual formation, consideration & breach remedies",
+                "Tort liabilities, proximate cause & duty of care",
+                "Criminal culpability, mens rea & evidentiary standards",
+                "Appellate brief writing & oral argument simulation",
+            ],
+            practice_activity_types=[
+                "case_brief",
+                "statutory_analysis",
+                "contract_clause_draft",
+                "oral_argument_memo",
+            ],
+            default_builder_activity="case_brief",
+            assessment_methods=[
+                "IRAC legal rigor & statutory alignment",
+                "Counter-precedent distinction accuracy",
+                "Substantive policy balance justification",
+            ],
+            sample_phase_templates=[
+                "Constitutional Architecture & Legal Authority",
+                "Statutory Interpretation & Judicial Precedent",
+                "Core Substantive Law (Contracts, Torts, Property)",
+                "Evidentiary Standards & Procedural Rules",
+                "Appellate Case Brief & Legal Argumentation",
+            ],
+        ),
+        "culinary_gastronomy": DomainProfile(
+            domain_key="culinary_gastronomy",
+            display_name="Culinary Arts & Gastronomy",
+            foundational_prerequisites=[
+                "Kitchen safety, knife mechanics & sanitation protocols",
+                "Heat transfer principles (conduction, convection, radiation)",
+                "Taste perception: Salt, acid, fat, sweet, bitter, umami",
+            ],
+            core_knowledge_areas=[
+                "Mise-en-place protocol & precision knife cuts",
+                "Maillard reaction, caramelization & temperature control",
+                "Mother sauces, emulsification & reduction dynamics",
+                "Protein coagulation & collagen breakdown temperatures",
+                "Flavor balancing & acid/fat counterpoint",
+                "Baking chemistry: Gluten formation, leavening & hydration",
+                "Tasting menu composition & plating architecture",
+            ],
+            practice_activity_types=[
+                "recipe_execution",
+                "flavor_balancing_log",
+                "knife_technique_drill",
+                "menu_composition",
+            ],
+            default_builder_activity="recipe_execution",
+            assessment_methods=[
+                "Technique execution & temperature precision audit",
+                "Sensory balance log (salt/acid/fat/sweet calibration)",
+                "Plating balance & textural variation review",
+            ],
+            sample_phase_templates=[
+                "Kitchen Ergonomics, Knife Cuts & Safety Primitives",
+                "Heat Transfer, Protein Coagulation & Searing Science",
+                "Mother Sauces, Emulsions & Liquid Extractions",
+                "Flavor Architecture & Multi-Variable Seasoning",
+                "Independent Tasting Menu Capstone Execution",
+            ],
+        ),
     }
 
     @classmethod
+    def synthesize_dynamic_profile(cls, user_intent: str) -> DomainProfile:
+        """Dynamically construct an authentic domain profile for any unknown subject.
+        
+        NEVER falls back to software engineering for non-software topics!
+        """
+        clean_name = user_intent.strip().title() or "Applied Discipline"
+        slug_key = re.sub(r"[^\w\s-]", "", clean_name.lower())
+        slug_key = re.sub(r"[\s_-]+", "_", slug_key).strip("_")[:30] or "custom_domain"
+
+        return DomainProfile(
+            domain_key=f"dynamic_{slug_key}",
+            display_name=f"{clean_name} Studies & Practice",
+            foundational_prerequisites=[
+                f"Physical and sensory observations in {clean_name}",
+                f"Core terminology, materials, and safety protocols for {clean_name}",
+                "Fundamental tools, vocabulary, and primary principles",
+            ],
+            core_knowledge_areas=[
+                f"Foundational history, physics/mechanics, and core principles of {clean_name}",
+                f"Tool handling, spatial/sensory awareness, and basic mechanics",
+                f"Intermediate execution protocols, composition, and technique",
+                f"Troubleshooting, error diagnostics, and counterfactual edge conditions",
+                f"Advanced synthesis, personal style, and independent project creation in {clean_name}",
+            ],
+            practice_activity_types=[
+                "practical_exercise",
+                "technique_drill",
+                "studio_exercise",
+                "case_analysis",
+            ],
+            default_builder_activity="practical_exercise",
+            assessment_methods=[
+                "Rubric-based dimensional critique",
+                "Empirical execution evidence audit",
+                "First-principles causal explanation",
+            ],
+            sample_phase_templates=[
+                f"Foundations, Primitives & Core Observations in {clean_name}",
+                f"Essential Techniques, Grammar & Tool Mechanics",
+                f"Intermediate Execution & Controlled Practice",
+                f"Critical Analysis, Failure Modes & Edge Refinements",
+                f"Independent Portfolio, Capstone & Creative Mastery",
+            ],
+        )
+
+    @classmethod
     def infer_domain(cls, user_intent: str) -> DomainProfile:
-        """Infer domain profile from user intent string using semantic keyword indicators."""
+        """Infer domain profile from user intent string using semantic keyword indicators.
+        
+        NEVER silently maps unknown disciplines to software engineering!
+        """
         text = user_intent.lower()
 
         # Check Computational Neuroscience first (specialized hybrid)
@@ -433,6 +594,18 @@ class DomainIntelligenceService:
         # Music / Instruments
         if any(w in text for w in ["piano", "guitar", "music", "chord", "melody", "harmony", "tempo", "scale", "instrument", "flute", "violin"]):
             return cls.DOMAINS["music_arts"]
+
+        # Photography & Visual Arts
+        if any(w in text for w in ["photo", "photography", "camera", "shutter", "aperture", "exposure", "lens", "portrait", "lighting", "darkroom"]):
+            return cls.DOMAINS["photography_visual_arts"]
+
+        # Law & Jurisprudence
+        if any(w in text for w in ["law", "legal", "constitution", "tort", "crime", "criminal law", "jurisprudence", "courtroom", "precedent", "statutory", "litigation"]):
+            return cls.DOMAINS["law_jurisprudence"]
+
+        # Culinary Arts & Cooking
+        if any(w in text for w in ["cooking", "culinary", "baking", "pastry", "recipe", "knife skills", "food science", "flavor", "gastronomy"]):
+            return cls.DOMAINS["culinary_gastronomy"]
 
         # Languages
         if any(w in text for w in ["french", "spanish", "german", "japanese", "mandarin", "italian", "language", "grammar", "vocabulary", "pronunciation", "speak"]):
@@ -458,8 +631,13 @@ class DomainIntelligenceService:
         if any(w in text for w in ["economics", "finance", "business", "stock market", "investing", "startup", "accounting", "venture capital"]):
             return cls.DOMAINS["business_economics"]
 
-        # Default fallback to Software Systems
-        return cls.DOMAINS["software_systems"]
+        # Explicit Software Systems & Computing
+        if any(w in text for w in ["software", "code", "programming", "python", "javascript", "rust", "c++", "linux", "compiler", "operating system", "database", "backend", "frontend", "api", "docker", "algorithm", "git", "web development", "computer science", "data structure"]):
+            return cls.DOMAINS["software_systems"]
+
+        # For any truly unrecognized topic (e.g. Gardening, Falconry, Architecture, Numismatics)
+        # Construct an authentic dynamic profile tailored to the topic!
+        return cls.synthesize_dynamic_profile(user_intent)
 
     @classmethod
     def generate_dynamic_phases(
@@ -517,14 +695,21 @@ class DomainIntelligenceService:
             indices = [int(i * (len(templates) - 1) / (num_phases - 1)) for i in range(num_phases)]
             selected_names = [templates[i] for i in indices]
         else:
-            selected_names = []
-            for i in range(num_phases):
-                base_name = templates[i % len(templates)]
-                cycle = (i // len(templates)) + 1
-                if cycle > 1:
-                    selected_names.append(f"{base_name} (Part {cycle})")
-                else:
-                    selected_names.append(base_name)
+            extended_stage_titles = [
+                f"Core Primitives & Observational Foundations in {domain_profile.display_name}",
+                "Elementary Grammar, Mechanics & Tool Dexterity",
+                "Controlled Drills, Invariants & Baseline Form",
+                "Combinatorial Patterns & Intermediate Synthesis",
+                "Applied Contextual Scenarios & Authentic Problems",
+                "Controlled Failure, Boundary Limits & Error Diagnostics",
+                "System Dynamics, Latency & Optimization Nuances",
+                "Adversarial Edge Cases & Non-Linear Interactions",
+                "Frontier Methodologies, State of the Art & Theoretical Debate",
+                "Holistic Capstone Construction & End-to-End Execution",
+                "Independent Evaluation, Benchmark Audits & Defense",
+                "Autonomous Mastery, Original Synthesis & Frontier Horizon",
+            ]
+            selected_names = extended_stage_titles[:num_phases]
 
         for i, (s_day, e_day) in enumerate(bounds):
             raw_name = selected_names[i]

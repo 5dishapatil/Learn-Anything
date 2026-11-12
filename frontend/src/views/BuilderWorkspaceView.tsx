@@ -39,7 +39,7 @@ export interface BuilderWorkspaceViewProps {
   onCompleteMilestone: (milestoneId: number) => Promise<void>;
   onSaveArtifact: (artifactId: number, content: string) => Promise<void>;
   onVerifyArtifact: (artifactId: number) => Promise<any>;
-  onVerifyDayLab?: (dayNumber: number, code: string) => Promise<any>;
+  onVerifyDayLab?: (dayNumber: number, submission: string, isCode?: boolean) => Promise<any>;
   onCompleteDay?: (dayNumber: number) => Promise<void>;
   onSubmitReflection: (payload: {
     milestone_id: number;
@@ -145,6 +145,7 @@ export const BuilderWorkspaceView: React.FC<BuilderWorkspaceViewProps> = ({
   }
 
   const selectedMilestone: ProjectMilestoneData =
+    project?.milestones.find((m) => m.sequence_order === effectiveDayNumber) ||
     project?.milestones.find((m) => m.id === selectedMilestoneId) ||
     project?.milestones[0] || {
       id: 1,
@@ -259,7 +260,8 @@ export const BuilderWorkspaceView: React.FC<BuilderWorkspaceViewProps> = ({
     setBusy(true);
     try {
       if (onVerifyDayLab) {
-        const res = await onVerifyDayLab(dayNumber, editorContent);
+        const submission = isCodeActivity ? editorContent : (nonCodeSubmission || editorContent);
+        const res = await onVerifyDayLab(dayNumber, submission, isCodeActivity);
         setVerificationResult(res);
       } else if (activeArtifact) {
         await onSaveArtifact(activeArtifact.id, editorContent);

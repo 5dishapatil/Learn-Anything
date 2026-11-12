@@ -337,6 +337,50 @@ export function App() {
     }
   };
 
+  const handleSelectDay = async (dNum: number) => {
+    setCurrentDayNumber(dNum);
+    if (!activeJourney) return;
+
+    try {
+      const dayDetail = await axiomApi.getJourneyDayDetail(activeJourney.id, dNum, true);
+      setJourneys((prev) =>
+        prev.map((j) => {
+          if (j.id !== activeJourney.id) return j;
+          const updatedDays = (j.days || []).map((d) => (d.day_number === dNum ? { ...d, ...dayDetail } : d));
+          if (!updatedDays.some((d) => d.day_number === dNum)) {
+            updatedDays.push(dayDetail);
+            updatedDays.sort((a, b) => a.day_number - b.day_number);
+          }
+          return { ...j, days: updatedDays };
+        })
+      );
+
+      if (dayDetail.scholar_concept_id) {
+        const cw = await axiomApi.getConceptWorkspace(dayDetail.scholar_concept_id);
+        setConceptWorkspace(cw);
+      } else {
+        const matchingConcept = activeJourney.concepts?.find(
+          (c) => c.slug?.startsWith(`day-${dNum}-`) || c.title === dayDetail.title
+        );
+        if (matchingConcept) {
+          const cw = await axiomApi.getConceptWorkspace(matchingConcept.id);
+          setConceptWorkspace(cw);
+        }
+      }
+
+      if (effectiveProject) {
+        const matchingMilestone = effectiveProject.milestones?.find(
+          (m) => m.sequence_order === dNum || m.concept_id === dayDetail.scholar_concept_id
+        );
+        if (matchingMilestone) {
+          setSelectedMilestoneId(matchingMilestone.id);
+        }
+      }
+    } catch (err) {
+      console.warn(`Could not fetch details for Day ${dNum}:`, err);
+    }
+  };
+
   const handleCreateJourney = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!intentInput.trim()) {
@@ -344,13 +388,7 @@ export function App() {
       return;
     }
     setCreatingJourney(true);
-    setGenerationStageText('Stage 1/3: Searching live web sources (Wikipedia, DuckDuckGo, arXiv, GitHub)...');
-    const stageTimer1 = setTimeout(() => {
-      setGenerationStageText('Stage 2/3: Synthesizing curriculum & CodeChef Builder Labs with qwen3.5:9b...');
-    }, 1400);
-    const stageTimer2 = setTimeout(() => {
-      setGenerationStageText('Stage 3/3: Initializing Daily Tasks, Socratic Mastery Map & Sandbox...');
-    }, 3200);
+    setGenerationStageText('Synthesizing curriculum architecture, progressive daily syllabus & hands-on practical labs...');
 
     try {
       const intakeProfile = {
@@ -393,15 +431,13 @@ export function App() {
       setStatusBanner(`Roadmap Generated: "${created.title}" (${created.duration_days} Days · qwen3.5:9b)`);
       pushToast(
         'Roadmap & Builder Track Generated!',
-        `Redirected to "${created.title}" (${created.concepts.length} modules & ${created.projects?.[0]?.milestone_count || 4} CodeChef labs ready).`,
+        `Redirected to "${created.title}" (${created.concepts.length} modules & ${created.projects?.[0]?.milestone_count || 4} practice labs ready).`,
         'success'
       );
       setActiveNav('journeys');
     } catch (err: any) {
       pushToast('Generation Error', err?.message || 'Could not generate roadmap.', 'warning');
     } finally {
-      clearTimeout(stageTimer1);
-      clearTimeout(stageTimer2);
       setCreatingJourney(false);
       setGenerationStageText('');
     }
@@ -465,7 +501,7 @@ export function App() {
     setJourneys(jList);
     setActiveNav(targetRoad);
     pushToast(
-      `Switched to ${targetRoad === 'builder' ? 'CodeChef Builder Road' : 'Scholar Road'}`,
+      `Switched to ${targetRoad === 'builder' ? 'Builder Road (Hands-On Lab)' : 'Scholar Road'}`,
       'Full concept and milestone context preserved.',
       'info'
     );
@@ -516,7 +552,7 @@ export function App() {
       title: 'Learning Roads',
       items: [
         { id: 'scholar', label: 'Scholar Road', icon: BookOpen, badge: 'Theory' },
-        { id: 'builder', label: 'Builder Road', icon: Code2, badge: 'CodeChef' },
+        { id: 'builder', label: 'Builder Road', icon: Code2, badge: 'Labs' },
       ],
     },
     {
@@ -867,7 +903,7 @@ export function App() {
                             </span>
                           </div>
                           <div className="mt-2 text-sm font-bold text-white">
-                            {effectiveProject?.milestones[0]?.title || 'Step-by-Step CodeChef Practice Lab'}
+                            {effectiveProject?.milestones[0]?.title || 'Step-by-Step Hands-On Practice Lab'}
                           </div>
                         </div>
                       </div>
@@ -1117,8 +1153,8 @@ export function App() {
                       unlocked: journeys.length > 0,
                     },
                     {
-                      title: 'CodeChef Builder',
-                      desc: 'Provisioned step-by-step hands-on coding labs',
+                      title: 'Builder Road',
+                      desc: 'Provisioned step-by-step hands-on practice labs',
                       unlocked: projects.length > 0,
                     },
                     {
@@ -1191,7 +1227,7 @@ export function App() {
                     What Do You Want to Understand From First Principles or Build Today?
                   </h2>
                   <p className="mt-1 text-sm sm:text-base text-slate-300">
-                    Design your personalized learning & CodeChef-style engineering journey with local AI and live web grounding.
+                    Design your personalized learning &amp; hands-on engineering journey with local AI and live web grounding.
                   </p>
                 </div>
                 <div className="rounded-xl border border-slate-800 bg-slate-900/90 px-4 py-2.5 font-mono text-xs text-slate-300">
@@ -1423,6 +1459,16 @@ export function App() {
                         </p>
                         <div className="space-y-3">
                           <div className="space-y-1">
+                            <label className="font-mono text-xs text-slate-300">Prior Knowledge &amp; Foundational Concepts Mastered</label>
+                            <input
+                              type="text"
+                              value={existingKnowledge}
+                              onChange={(e) => setExistingKnowledge(e.target.value)}
+                              placeholder="e.g. Mastered multivariable calculus, dynamical systems, linear algebra, standard deep learning"
+                              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3.5 py-2 text-sm text-white focus:border-indigo-500 focus:outline-none"
+                            />
+                          </div>
+                          <div className="space-y-1">
                             <label className="font-mono text-xs text-slate-300">Specific Research Focus / Subfield Specialization</label>
                             <input
                               type="text"
@@ -1461,9 +1507,9 @@ export function App() {
                     {/* Road Mode Selector */}
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 pt-1">
                       {[
-                        { id: 'hybrid', label: 'Hybrid (Scholar + CodeChef Builder)' },
+                        { id: 'hybrid', label: 'Hybrid (Scholar + Builder Road)' },
                         { id: 'scholar', label: 'Scholar Road (Deep Theory)' },
-                        { id: 'builder', label: 'Builder Road (Step-by-Step Code)' },
+                        { id: 'builder', label: 'Builder Road (Hands-On Lab)' },
                       ].map((rm) => (
                         <button
                           key={rm.id}
@@ -1705,7 +1751,7 @@ export function App() {
                       <Map className="mx-auto h-8 w-8 text-slate-600" />
                       <div className="text-sm font-bold text-slate-300">No Active Plans Yet</div>
                       <p className="text-xs text-slate-500 leading-relaxed">
-                        Fill out steps 1–3 on the left and click Generate to create your first personalized learning & CodeChef builder plan.
+                        Fill out steps 1–3 on the left and click Generate to create your first personalized learning &amp; hands-on builder plan.
                       </p>
                     </div>
                   )}
@@ -1725,7 +1771,7 @@ export function App() {
                   <div>
                     <h2 className="text-3xl font-extrabold tracking-tight text-white">LEARNING PATHS</h2>
                     <p className="mt-1 text-sm text-slate-300">
-                      Your personalized AI-generated learning journeys, Scholar modules, and CodeChef Builder tracks.
+                      Your personalized AI-generated learning journeys, Scholar modules, and Hands-On Builder tracks.
                     </p>
                   </div>
                   <div className="flex items-center gap-3">
@@ -1784,7 +1830,7 @@ export function App() {
                         onClick={() => handleSwitchRoad('builder')}
                         className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-6 py-3 text-xs sm:text-sm font-extrabold uppercase tracking-wider text-white hover:bg-emerald-500 shadow-md"
                       >
-                        OPEN CODECHEF BUILDER ROAD <Code2 className="h-4 w-4" />
+                        OPEN BUILDER ROAD <Code2 className="h-4 w-4" />
                       </button>
                       <button
                         type="button"
@@ -1957,7 +2003,7 @@ export function App() {
                 </span>
                 <h2 className="text-3xl font-extrabold tracking-tight text-white">DAILY TASKS</h2>
                 <p className="text-sm text-slate-400 mt-1">
-                  Auto-generated from your curriculum progress across Scholar Theory, CodeChef Builder Labs, and Socratic Assessments.
+                  Auto-generated from your curriculum progress across Scholar Theory, Builder Labs, and Socratic Assessments.
                 </p>
               </div>
 
@@ -2065,7 +2111,7 @@ export function App() {
                   <CheckSquare className="mx-auto h-10 w-10 text-slate-600" />
                   <h3 className="text-lg font-bold text-white">No Daily Tasks Generated Yet</h3>
                   <p className="text-xs text-slate-400 max-w-md mx-auto">
-                    Create a learning journey in the Curriculum Planner to automatically schedule your daily Study, CodeChef Lab, and Socratic Assessment tasks.
+                    Create a learning journey in the Curriculum Planner to automatically schedule your daily Study, Practical Lab, and Socratic Assessment tasks.
                   </p>
                   <button
                     type="button"
@@ -2089,7 +2135,7 @@ export function App() {
               journeyDays={activeJourney?.days || []}
               currentDayNumber={currentDayNumber}
               totalDurationDays={activeJourney?.duration_days || activeJourney?.days?.length || 30}
-              onSelectDay={(dNum) => setCurrentDayNumber(dNum)}
+              onSelectDay={(dNum) => handleSelectDay(dNum)}
               onSelectConcept={async (cId) => {
                 const cw = await axiomApi.getConceptWorkspace(cId);
                 setConceptWorkspace(cw);
@@ -2154,7 +2200,7 @@ export function App() {
           )}
 
           {/* =================================================================
-              SCREEN 6: CODECHEF-STYLE STEP-BY-STEP BUILDER WORKSPACE
+              SCREEN 6: STEP-BY-STEP HANDS-ON BUILDER WORKSPACE
              ================================================================= */}
           {activeNav === 'builder' && (
             <BuilderWorkspaceView
@@ -2163,7 +2209,7 @@ export function App() {
               journeyDays={activeJourney?.days || []}
               currentDayNumber={currentDayNumber}
               totalDurationDays={activeJourney?.duration_days || activeJourney?.days?.length || 30}
-              onSelectDay={(dNum) => setCurrentDayNumber(dNum)}
+              onSelectDay={(dNum) => handleSelectDay(dNum)}
               onSelectMilestone={(mId) => setSelectedMilestoneId(mId)}
               onUnlockHint={async (mId, lvl) => {
                 await axiomApi.unlockMilestoneHint(mId, lvl);
@@ -2176,7 +2222,7 @@ export function App() {
               onCompleteMilestone={async (mId) => {
                 const updated = await axiomApi.completeMilestone(mId);
                 setActiveProject(updated);
-                pushToast('CodeChef Builder Lab Completed! +100 XP', 'Next sequential milestone unlocked.', 'success');
+                pushToast('Builder Lab Completed! +100 XP', 'Next sequential milestone unlocked.', 'success');
               }}
               onSaveArtifact={async (artId, content) => {
                 await axiomApi.updateArtifact(artId, content);
@@ -2194,12 +2240,13 @@ export function App() {
                 );
                 return res;
               }}
-              onVerifyDayLab={async (dNum, code) => {
+              onVerifyDayLab={async (dNum, submission, isCode = true) => {
                 if (!activeJourney) return null;
-                const res = await axiomApi.verifyDayLab(activeJourney.id, dNum, { code_submission: code });
+                const payload = isCode ? { code_submission: submission } : { text_submission: submission };
+                const res = await axiomApi.verifyDayLab(activeJourney.id, dNum, payload);
                 pushToast(
-                  res.passed ? `Day ${dNum} All Test Cases Passed!` : `Day ${dNum} Test Case Failed`,
-                  (res as any).execution_engine || res.execution_sandbox || 'Isolated Sandbox',
+                  res.passed ? `Day ${dNum} All Criteria Passed!` : `Day ${dNum} Evaluation Feedback`,
+                  (res as any).execution_engine || res.execution_sandbox || 'Isolated Runner',
                   res.passed ? 'success' : 'warning'
                 );
                 return res;
@@ -2435,7 +2482,7 @@ export function App() {
                           }}
                           className="rounded-xl bg-emerald-600 px-3.5 py-1.5 text-xs font-bold text-white hover:bg-emerald-500"
                         >
-                          Open in CodeChef Builder →
+                          Open in Builder Workspace →
                         </button>
                       </div>
                     </div>

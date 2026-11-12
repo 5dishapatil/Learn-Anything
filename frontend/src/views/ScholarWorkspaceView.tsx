@@ -662,7 +662,7 @@ export const ScholarWorkspaceView: React.FC<ScholarWorkspaceViewProps> = ({
             {/* =====================================================================
                 PART II: HOW TO DO IT (First-Principles Theory, Math, Worked Examples & Inline Feynman Cycle)
                ===================================================================== */}
-            {lesson && (
+            {(activeDayData?.scholar_content_markdown || lesson) && (
               <section id="part-how-to-do-it" className="space-y-10">
                 <div className="flex items-center gap-3 border-b border-slate-800 pb-3">
                   <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-600 font-mono text-sm font-extrabold text-white">
@@ -678,6 +678,15 @@ export const ScholarWorkspaceView: React.FC<ScholarWorkspaceViewProps> = ({
                   </div>
                 </div>
 
+                {activeDayData?.scholar_content_markdown ? (
+                  <div className="rounded-2xl border border-slate-800/90 bg-slate-900/60 p-7 sm:p-9 shadow-lg">
+                    <MarkdownRenderer
+                      content={activeDayData.scholar_content_markdown}
+                      className={`${fontClass} ${sizeClasses} text-slate-100 leading-relaxed`}
+                    />
+                  </div>
+                ) : lesson ? (
+                  <>
                 {/* 1. The Fundamental Problem & Why It Exists */}
                 <div className="space-y-4">
                   <h3 className="font-serif text-2xl font-bold tracking-tight text-slate-100">
@@ -824,6 +833,8 @@ export const ScholarWorkspaceView: React.FC<ScholarWorkspaceViewProps> = ({
                     )}
                   </div>
                 )}
+                </>
+                ) : null}
 
                 {/* 7. INLINE DAY-WISE FEYNMAN LEARNING ENGINE (Applied Directly to Day k's Structure) */}
                 <div className="rounded-2xl border-2 border-indigo-500/40 bg-indigo-950/20 p-6 sm:p-8 space-y-6 shadow-xl">

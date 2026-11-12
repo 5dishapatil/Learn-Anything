@@ -403,6 +403,7 @@ class CurriculumPlannerService:
                 previous_batch_summary=batch_summary_history,
                 provider=provider,
                 model=model,
+                intake_profile=intake_profile,
             )
 
             # Persist batch immediately to database
@@ -431,7 +432,7 @@ class CurriculumPlannerService:
                     builder_hints_json=d_info.get("builder_hints", []),
                     builder_rubric_json=d_info.get("builder_rubric", []),
                     assessment_json=d_info.get("assessment", {}),
-                    generation_status="planned",
+                    generation_status=d_info.get("generation_status", "validated"),
                     is_completed=False,
                     scholar_completed=False,
                     builder_completed=False,
@@ -462,11 +463,11 @@ class CurriculumPlannerService:
                 f"Outcomes established: {[o.get('description', '') for o in last_day_in_batch.get('learning_outcomes', [])[:2]]}."
             )
 
-        # 6. Wire Concepts & Milestones for first key days (Days 1..30)
+        # 6. Wire Concepts & Milestones for ALL Days in Journey (Universal Coverage)
         from app.services.ai_orchestrator import AIOrchestrationService
         orchestrator = AIOrchestrationService(self.db)
         concepts_created: list[Concept] = []
-        for d in all_generated_days[:min(30, len(all_generated_days))]:
+        for d in all_generated_days:
             d_num = d["day_number"]
             concept = Concept(
                 journey_id=journey.id,
@@ -478,8 +479,8 @@ class CurriculumPlannerService:
                 difficulty_level="beginner" if d_num <= 4 else "intermediate",
                 mastery_status="unstarted",
                 mastery_score=0.0,
-                position_x=float(120 + ((d_num - 1) % 4) * 230),
-                position_y=float(120 + ((d_num - 1) // 4) * 140),
+                position_x=float(120 + ((d_num - 1) % 5) * 220),
+                position_y=float(120 + ((d_num - 1) // 5) * 140),
                 related_disciplines_json=[domain_profile.display_name],
                 research_directions_json=[f"Frontier extensions in {d['title']}"],
             )
@@ -504,7 +505,7 @@ class CurriculumPlannerService:
                 "real_world_analogy": f"Consider {concept.title} as a specialized pipeline stage in {domain_profile.display_name} that guarantees correctness under bounded resource constraints.",
                 "mathematical_formulation": f"$$\\text{{Invariant}}({concept.title}) = \\sum_{{i=1}}^N \\Delta s_i \\quad \\text{{subject to}} \\quad C_{{max}} < \\infty$$",
                 "worked_example": d.get("practice_task") or f"Step 1: Receive input signal. Step 2: Validate state invariant. Step 3: Compute transformation. Step 4: Emit verified output.",
-                "engineering_tradeoffs": f"Trade-off in {concept.title}: Algorithmic precision vs. computational overhead and memory footprint.",
+                "engineering_tradeoffs": f"Trade-off in {concept.title}: Precision vs. overhead and operational constraints.",
                 "feynman_stage": self.FEYNMAN_STAGES[(d_num - 1) % len(self.FEYNMAN_STAGES)],
             }
             orchestrator._populate_concept_scholar_artifacts(
@@ -564,15 +565,30 @@ class CurriculumPlannerService:
             self.db.add(artifact)
             concept.builder_milestone_id = milestone.id
 
-        # 7. Wire Acyclic Dependencies across concepts
-        for i in range(len(concepts_created) - 1):
-            dep = ConceptDependency(
-                source_concept_id=concepts_created[i].id,
-                target_concept_id=concepts_created[i + 1].id,
-                dependency_type="essential" if i < 3 else "recommended",
-                rationale=f"{concepts_created[i].title} provides the conceptual prerequisites for {concepts_created[i + 1].title}.",
+        # 7. Wire Multi-Precursor Acyclic Dependencies across concepts (Real DAG)
+        for i in range(1, len(concepts_created)):
+            # Direct sequential prerequisite: (i - 1) -> i
+            dep_seq = ConceptDependency(
+                source_concept_id=concepts_created[i - 1].id,
+                target_concept_id=concepts_created[i].id,
+                dependency_type="essential" if i <= 4 else "recommended",
+                rationale=f"{concepts_created[i - 1].title} provides the direct prerequisite foundations for {concepts_created[i].title}.",
             )
-            self.db.add(dep)
+            self.db.add(dep_seq)
+
+            # Cross-precursor grounding for deeper concepts (i >= 3)
+            # Connects to earlier foundational phase anchor: strictly lower index j < i, guaranteeing acyclic DAG
+            if i >= 3:
+                precursor_idx = (i // 4) * 4
+                if precursor_idx < i - 1:
+                    dep_cross = ConceptDependency(
+                        source_concept_id=concepts_created[precursor_idx].id,
+                        target_concept_id=concepts_created[i].id,
+                        dependency_type="recommended",
+                        rationale=f"Foundational grounding from {concepts_created[precursor_idx].title} reinforces {concepts_created[i].title}.",
+                    )
+                    self.db.add(dep_cross)
+
         self.db.commit()
 
         # 8. Immediate Actionability: Synthesize Day 1 deeply so the learner can start right away!
@@ -627,6 +643,7 @@ class CurriculumPlannerService:
         previous_batch_summary: str,
         provider: Any,
         model: str,
+        intake_profile: Optional[dict[str, Any]] = None,
     ) -> list[dict[str, Any]]:
         """Generate a single batch slice of learning days with shared outcome IDs and no generic fallbacks."""
         num_days = b_end - b_start + 1
@@ -637,6 +654,23 @@ class CurriculumPlannerService:
             if not (p["end_day"] < b_start or p["start_day"] > b_end)
         ]
         phase_context = ", ".join(f"{p['name']} (Days {p['start_day']}–{p['end_day']}: {p['focus']})" for p in relevant_phases)
+
+        intake_section = ""
+        if intake_profile:
+            prior_concepts = intake_profile.get("prior_concepts") or intake_profile.get("existing_knowledge")
+            known_tools = intake_profile.get("known_tools")
+            gaps = intake_profile.get("knowledge_gaps")
+            research_focus = intake_profile.get("specific_research_focus")
+            target_goal = intake_profile.get("final_project_goal")
+            intake_section = (
+                "LEARNER INTAKE PROFILE & CONSTRAINTS:\n"
+                f"- Stated Prior Knowledge / Concepts Mastered: {prior_concepts or 'None stated'}\n"
+                f"- Tools / Tech Familiar With: {known_tools or 'Standard'}\n"
+                f"- Self-Identified Knowledge Gaps: {gaps or 'None specified'}\n"
+                f"- Stated Research Focus: {research_focus or 'General mastery'}\n"
+                f"- Ultimate Creation Goal: {target_goal or 'Independent project'}\n"
+                "IMPORTANT: Tailor topic sequence and difficulty to build directly upon known concepts, addressing self-identified gaps while avoiding redundant elementary recaps.\n\n"
+            )
 
         day1_instruction = ""
         if b_start == 1:
@@ -659,6 +693,7 @@ class CurriculumPlannerService:
             f"Generate Days: {b_start} through {b_end} (Exactly {num_days} days).\n"
             f"Phases Spanning this Batch: {phase_context}\n"
             f"Previous Batch Summary: {previous_batch_summary}\n\n"
+            f"{intake_section}"
             f"{day1_instruction}"
             "RULES:\n"
             "1. Output a JSON array with exactly one object per day for each day from "
@@ -735,6 +770,7 @@ class CurriculumPlannerService:
             curriculum_title=curriculum_title,
             phases=phases,
             experience_level=experience_level,
+            intake_profile=intake_profile,
         )
 
     def _validate_and_fill_batch(
@@ -809,6 +845,7 @@ class CurriculumPlannerService:
                     "recall_question": f"What fundamental mechanism does {title} govern?",
                     "think_deeper_question": f"What breaks if a core assumption of {title} fails?",
                 }),
+                "generation_status": "validated",
             })
 
         return results
@@ -944,6 +981,7 @@ class CurriculumPlannerService:
                     "recall_question": f"Explain the causal mechanism behind {title}.",
                     "think_deeper_question": f"What breaks if a fundamental invariant of {title} is violated?",
                 },
+                "generation_status": "provisional_scaffold",
             })
 
         return results
@@ -966,8 +1004,8 @@ class CurriculumPlannerService:
         if not journey:
             raise ValueError(f"Journey {journey_id} not found")
 
-        domain_key = DomainIntelligenceService.infer_domain(journey.user_intent or journey.title)
-        domain_profile = DomainIntelligenceService.DOMAINS.get(domain_key) or DomainIntelligenceService.DOMAINS["software_systems"]
+        domain_profile = DomainIntelligenceService.infer_domain(journey.user_intent or journey.title)
+        domain_key = domain_profile.domain_key
         provider, model, _ = self.provider_router.get_active_provider("general_explanation")
 
         is_code_domain = "code" in (day.builder_activity_type or "") or domain_key in ["software_systems", "computational_neuroscience"]
