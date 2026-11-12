@@ -1,0 +1,29 @@
+{
+  "name": "Axiom OS - 07 Research Inbox Processor",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [{ "field": "hours", "hoursInterval": 12 }] }
+      },
+      "id": "inbox-trigger",
+      "name": "Every 12 Hours",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8000/api/v1/automation/workflows/research_inbox/execute"
+      },
+      "id": "inbox-call",
+      "name": "Process Approved Feeds & Suggest Concepts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [520, 300]
+    }
+  ],
+  "connections": {
+    "Every 12 Hours": { "main": [[{ "node": "Process Approved Feeds & Suggest Concepts", "type": "main", "index": 0 }]] }
+  }
+}

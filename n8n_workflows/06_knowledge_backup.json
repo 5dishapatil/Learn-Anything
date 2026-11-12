@@ -1,0 +1,29 @@
+{
+  "name": "Axiom OS - 06 Knowledge Backup",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [{ "field": "cronExpression", "expression": "0 2 * * *" }] }
+      },
+      "id": "backup-trigger",
+      "name": "Nightly 2AM Backup",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8000/api/v1/automation/workflows/knowledge_backup/execute"
+      },
+      "id": "backup-call",
+      "name": "Create Dated Markdown & DB Snapshot",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [520, 300]
+    }
+  ],
+  "connections": {
+    "Nightly 2AM Backup": { "main": [[{ "node": "Create Dated Markdown & DB Snapshot", "type": "main", "index": 0 }]] }
+  }
+}

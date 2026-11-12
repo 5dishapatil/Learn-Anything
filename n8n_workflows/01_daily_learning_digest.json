@@ -1,0 +1,33 @@
+{
+  "name": "Axiom OS - 01 Daily Learning Digest",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [{ "field": "cronExpression", "expression": "0 8 * * *" }] }
+      },
+      "id": "schedule-trigger",
+      "name": "Daily 8AM Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8000/api/v1/automation/workflows/daily_digest/execute",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "X-Axiom-Automation-Source", "value": "n8n-local" }]
+        }
+      },
+      "id": "axiom-digest-call",
+      "name": "Generate & Save Daily Digest",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [520, 300]
+    }
+  ],
+  "connections": {
+    "Daily 8AM Trigger": { "main": [[{ "node": "Generate & Save Daily Digest", "type": "main", "index": 0 }]] }
+  }
+}

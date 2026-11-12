@@ -1,0 +1,29 @@
+{
+  "name": "Axiom OS - 03 Resource Reverification",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [{ "field": "cronExpression", "expression": "0 3 * * 0" }] }
+      },
+      "id": "reverify-trigger",
+      "name": "Weekly Sunday 3AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8000/api/v1/automation/workflows/resource_reverification/execute"
+      },
+      "id": "reverify-call",
+      "name": "Reverify Saved Resource Links",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [520, 300]
+    }
+  ],
+  "connections": {
+    "Weekly Sunday 3AM": { "main": [[{ "node": "Reverify Saved Resource Links", "type": "main", "index": 0 }]] }
+  }
+}

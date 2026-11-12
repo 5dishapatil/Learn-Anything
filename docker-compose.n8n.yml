@@ -1,0 +1,28 @@
+version: '3.8'
+
+# Optional Local n8n Community Edition Configuration for Axiom OS
+# Note: Axiom OS works completely without n8n or Docker.
+# If Docker is not installed on Windows, you can run n8n natively via Node.js:
+#   npx n8n start
+
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:latest
+    container_name: axiom-n8n-local
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5678:5678"
+    environment:
+      - N8N_HOST=127.0.0.1
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - NODE_ENV=production
+      - WEBHOOK_URL=http://127.0.0.1:5678/
+      - GENERIC_TIMEZONE=Asia/Kolkata
+      - AXIOM_BACKEND_URL=http://host.docker.internal:8000
+    volumes:
+      - n8n_local_data:/home/node/.n8n
+      - ./n8n_workflows:/home/node/workflows:ro
+
+volumes:
+  n8n_local_data:

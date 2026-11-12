@@ -1,0 +1,29 @@
+{
+  "name": "Axiom OS - 04 Weekly Project Review",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [{ "field": "cronExpression", "expression": "0 18 * * 5" }] }
+      },
+      "id": "weekly-proj-trigger",
+      "name": "Friday 6PM Review",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8000/api/v1/automation/workflows/weekly_project_review/execute"
+      },
+      "id": "weekly-proj-call",
+      "name": "Synthesize Milestones & Experiments",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [520, 300]
+    }
+  ],
+  "connections": {
+    "Friday 6PM Review": { "main": [[{ "node": "Synthesize Milestones & Experiments", "type": "main", "index": 0 }]] }
+  }
+}

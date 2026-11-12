@@ -1,0 +1,79 @@
+{
+  "name": "Axiom OS - Workflow 8: Multi-Agent Curriculum & Research Planner",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "axiom-curriculum-agent",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Curriculum Planning Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://127.0.0.1:8000/api/v1/resources/web-search",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "={{ $json.body.user_intent }}"
+            },
+            {
+              "name": "max_items",
+              "value": "8"
+            }
+          ]
+        }
+      },
+      "id": "research-discovery-agent",
+      "name": "Agent 1: Live Web, YouTube & arXiv Research Agent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [520, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:11434/api/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"qwen3.5:9b\",\n  \"prompt\": \"Design a progressive Day-by-Day first-principles syllabus and coding lab roadmap for: {{ $node['Curriculum Planning Webhook'].json.body.user_intent }} over {{ $node['Curriculum Planning Webhook'].json.body.duration_days }} days.\",\n  \"stream\": false\n}"
+      },
+      "id": "ollama-architect-agent",
+      "name": "Agent 2: Ollama qwen3.5:9b Syllabus & Feynman Stage Architect",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [820, 300]
+    }
+  ],
+  "connections": {
+    "Curriculum Planning Webhook": {
+      "main": [
+        [
+          {
+            "node": "Agent 1: Live Web, YouTube & arXiv Research Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agent 1: Live Web, YouTube & arXiv Research Agent": {
+      "main": [
+        [
+          {
+            "node": "Agent 2: Ollama qwen3.5:9b Syllabus & Feynman Stage Architect",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "name": "Axiom OS - 05 Obsidian Export Pipeline",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "axiom-obsidian-export",
+        "responseMode": "lastNode"
+      },
+      "id": "obsidian-webhook",
+      "name": "Approved Export Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8000/api/v1/automation/workflows/obsidian_export/execute"
+      },
+      "id": "obsidian-export-call",
+      "name": "Execute Authorized Obsidian Export",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [520, 300]
+    }
+  ],
+  "connections": {
+    "Approved Export Webhook": { "main": [[{ "node": "Execute Authorized Obsidian Export", "type": "main", "index": 0 }]] }
+  }
+}
